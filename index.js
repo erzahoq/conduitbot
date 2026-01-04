@@ -10,6 +10,9 @@ const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
 
+const { readJsonSafe, writeJsonAtomic, withFileLock } = require("./helpers/jsonStore");
+
+
 const { sanitizeMessage } = require('./helpers/sanitize');
 const { loadMultipliers, getEffectiveMultiplier } = require("./helpers/xpmult");
 const { handleLevelUpRoles } = require('./helpers/functions');
@@ -93,169 +96,154 @@ client.on('interactionCreate', async interaction => {
 const logPath = path.join(__dirname, 'data', 'message_log.txt');
 
 // xp + message logging
-client.on('messageCreate', async message => {
+client.on("messageCreate", async (message) => {
   try {
-    // ignore bots
     if (message.author.bot) return;
 
-    const original = message.content || '';
-    let sanitized = sanitizeMessage(original);
+    const original = message.content || "";
+    const sanitized = sanitizeMessage(original);
+    if (!sanitized) return;
 
-    if (!sanitized) return; // skip empty after cleaning
-    
-
-    // one line per message
-    fs.appendFile(logPath, sanitized + '\n', err => {
-      if (err) console.error('Failed to append to message_log.txt:', err);
+    // message log (this can stay callback-based; it's append-only)
+    fs.appendFile(logPath, sanitized + "\n", (err) => {
+      if (err) console.error("Failed to append to message_log.txt:", err);
     });
 
-    // xp system
-    const xpDataPath = path.join(__dirname, 'data', 'xp.json');
-const weeklyPath = path.join(__dirname, 'data', 'xp_weekly.json');
-const weeklyConfigPath = path.join(__dirname, 'data', 'weekly_config.json');
-
-// weekly xp — load and rollover
-let weekly = {
-  weekKey: "",
-  users: {},
-  record: { userId: null, xp: 0 }, // all-time best single-week XP
-};
-
-try {
-  const rawWeekly = fs.readFileSync(weeklyPath, "utf8");
-  weekly = JSON.parse(rawWeekly);
-
-  // back-compat if old file is missing keys
-  weekly.users ??= {};
-  weekly.record ??= { userId: null, xp: 0 };
-  weekly.record.userId ??= null;
-  weekly.record.xp = Number(weekly.record.xp ?? 0);
-} catch {
-  weekly = {
-    weekKey: "",
-    users: {},
-    record: { userId: null, xp: 0 },
-  };
-}
-
-const currentWeekKey = getISOWeekKey(new Date());
-
-if (weekly.weekKey !== currentWeekKey) {
-  // announce last week's winners (if enabled)
-  const entries = Object.entries(weekly.users || {})
-    .map(([id, obj]) => [id, Number(obj?.xp ?? 0)])
-    .sort((a, b) => b[1] - a[1]);
-
-  const top10 = entries.slice(0, 10);
-
-  // update all-time best-week record from last week's winner
-  const winner = entries[0]; // [userId, xp]
-  if (winner) {
-    const [winId, winXP] = winner;
-    if (winXP > (weekly.record?.xp ?? 0)) {
-      weekly.record = { userId: winId, xp: winXP };
-    }
-  }
-
-  try {
-    const cfg = JSON.parse(fs.readFileSync(weeklyConfigPath, "utf8"));
-    if (cfg?.enabled && cfg?.channelId && top10.length > 0) {
-      const ch = await client.channels.fetch(cfg.channelId).catch(() => null);
-      if (ch) {
-        const medals = ["🥇", "🥈", "🥉"];
-        const lines = top10.map(([id, xp], i) => {
-          const prefix = medals[i] ?? `**#${i + 1}**`;
-          return `${prefix} <@${id}> — **${xp} XP**`;
-        });
-
-        const recordLine = weekly.record?.userId
-          ? `\n🏆 **All-time best week:** <@${weekly.record.userId}> — **${weekly.record.xp} XP**`
-          : "";
-
-        await ch.send(
-          `📊 **Weekly XP Results (${weekly.weekKey || "previous week"})**\n` +
-          lines.join("\n") +
-          recordLine
-        );
-      }
-    }
-  } catch {
-    // ignore errors sending announcement
-  }
-
-  // reset for the new week (keep the all-time record)
-  weekly = {
-    weekKey: currentWeekKey,
-    users: {},
-    record: weekly.record ?? { userId: null, xp: 0 },
-  };
-
-  // write reset right away so it doesn't re-announce
-  fs.writeFile(weeklyPath, JSON.stringify(weekly, null, 2), err => {
-    if (err) console.error("Failed to write xp_weekly.json (rollover):", err);
-  });
-}
-
-
-    let xpData = {};
-
-    try {
-      const rawData = fs.readFileSync(xpDataPath);
-      xpData = JSON.parse(rawData);
-    } catch (err) {
-      console.error('Failed to read xp.json, starting fresh:', err);
-    }
-
-    const mults = await loadMultipliers();
-    let multiplier = getEffectiveMultiplier(message.member, message.channel, mults);
-
-    // clamp BEFORE using it
-    multiplier = Math.max(0, multiplier);
+    // paths
+    const xpDataPath = path.join(__dirname, "data", "xp.json");
+    const weeklyPath = path.join(__dirname, "data", "xp_weekly.json");
+    const weeklyConfigPath = path.join(__dirname, "data", "weekly_config.json");
 
     const userId = message.author.id;
     const now = Date.now();
+
+    // ---- multiplier + xpGain ----
+    const mults = await loadMultipliers();
+    let multiplier = getEffectiveMultiplier(message.member, message.channel, mults);
+
+    // IMPORTANT: if any role is 0x, ensure multiplier is EXACTLY 0 (no rounding weirdness)
+    if (!Number.isFinite(multiplier)) multiplier = 1;
+    if (multiplier <= 0) multiplier = 0;
+
     const baseXP = Math.ceil(Math.random() * 65) + 85;
     const xpGain = Math.ceil(baseXP * multiplier);
 
-    if (!xpData[userId]) {
-      xpData[userId] = { xp: 0, lastMessage: 0 };
-    }
+    // If 0x, do nothing (and don't consume cooldown)
+    if (xpGain <= 0) return;
 
-    // compute old level before adding xp
-    const oldXP = xpData[userId].xp;
-    const oldLevel = getLevelFromXP(oldXP);
+    // We update BOTH files; lock in a consistent order to avoid deadlocks.
+    await withFileLock(xpDataPath, async () => {
+      await withFileLock(weeklyPath, async () => {
+        // ---------- load weekly ----------
+        let weekly = await readJsonSafe(weeklyPath, {
+          weekKey: "",
+          users: {},
+          record: { userId: null, xp: 0 },
+        });
 
-    // 60s cooldown
-    if (now - xpData[userId].lastMessage > 60 * 1000) {
-      xpData[userId].xp += xpGain;
-      // weekly xp
-      if (!weekly.users[userId]) weekly.users[userId] = { xp: 0 };
-      weekly.users[userId].xp += xpGain;
+        // back-compat
+        weekly.users ??= {};
+        weekly.record ??= { userId: null, xp: 0 };
+        weekly.record.userId ??= null;
+        weekly.record.xp = Number(weekly.record.xp ?? 0);
 
-      xpData[userId].lastMessage = now;
+        const currentWeekKey = getISOWeekKey(new Date());
 
-      const newXP = xpData[userId].xp;
-      const newLevel = getLevelFromXP(newXP);
+        // rollover if week changed
+        if (weekly.weekKey !== currentWeekKey) {
+          const entries = Object.entries(weekly.users || {})
+            .map(([id, obj]) => [id, Number(obj?.xp ?? 0)])
+            .sort((a, b) => b[1] - a[1]);
 
-      if (xpGain === 0) return;
+          const top10 = entries.slice(0, 10);
 
-      console.log(`Gave ${xpGain} XP to user ${message.author.tag} (Total: ${newXP}, mult: ${multiplier})`);
+          // update record from last week's winner
+          const winner = entries[0];
+          if (winner) {
+            const [winId, winXP] = winner;
+            if (winXP > (weekly.record?.xp ?? 0)) {
+              weekly.record = { userId: winId, xp: winXP };
+            }
+          }
 
-      if (newLevel > oldLevel) {
-        await handleLevelUpRoles(message.member, newLevel);
-      }
+          // announce (optional)
+          try {
+            const cfg = await readJsonSafe(weeklyConfigPath, { enabled: false });
+            if (cfg?.enabled && cfg?.channelId && top10.length > 0) {
+              const ch = await client.channels.fetch(cfg.channelId).catch(() => null);
+              if (ch) {
+                const medals = ["🥇", "🥈", "🥉"];
+                const lines = top10.map(([id, xp], i) => {
+                  const prefix = medals[i] ?? `**#${i + 1}**`;
+                  return `${prefix} <@${id}> — **${xp} XP**`;
+                });
 
-      fs.writeFile(xpDataPath, JSON.stringify(xpData, null, 2), err => {
-        if (err) console.error('Failed to write xp.json:', err);
+                const recordLine = weekly.record?.userId
+                  ? `\n🏆 **All-time best week:** <@${weekly.record.userId}> — **${weekly.record.xp} XP**`
+                  : "";
+
+                await ch.send(
+                  `📊 **Weekly XP Results (${weekly.weekKey || "previous week"})**\n` +
+                    lines.join("\n") +
+                    recordLine
+                );
+              }
+            }
+          } catch (e) {
+            console.error("Weekly announcement error:", e);
+          }
+
+          // reset for new week (keep record)
+          weekly = {
+            weekKey: currentWeekKey,
+            users: {},
+            record: weekly.record ?? { userId: null, xp: 0 },
+          };
+
+          // persist reset immediately
+          await writeJsonAtomic(weeklyPath, weekly);
+        }
+
+        // ---------- load xp ----------
+        const xpData = await readJsonSafe(xpDataPath, {});
+
+        if (!xpData[userId]) xpData[userId] = { xp: 0, lastMessage: 0 };
+
+        // cooldown: 60s
+        const last = Number(xpData[userId].lastMessage ?? 0);
+        if (now - last <= 60 * 1000) return;
+
+        // old level before adding
+        const oldXP = Number(xpData[userId].xp ?? 0);
+        const oldLevel = getLevelFromXP(oldXP);
+
+        // apply XP
+        xpData[userId].xp = Math.floor(oldXP + xpGain);
+        xpData[userId].lastMessage = now;
+
+        // weekly XP
+        if (!weekly.users[userId]) weekly.users[userId] = { xp: 0 };
+        weekly.users[userId].xp = Math.floor(Number(weekly.users[userId].xp ?? 0) + xpGain);
+
+        const newXP = xpData[userId].xp;
+        const newLevel = getLevelFromXP(newXP);
+
+        console.log(
+          `Gave ${xpGain} XP to user ${message.author.tag} (Total: ${newXP}, mult: ${multiplier})`
+        );
+
+        // write both atomically
+        await writeJsonAtomic(xpDataPath, xpData);
+        await writeJsonAtomic(weeklyPath, weekly);
+
+        // level-up roles AFTER saving (so a crash doesn't lose XP)
+        if (newLevel > oldLevel) {
+          await handleLevelUpRoles(message.member, newLevel);
+        }
       });
-
-      fs.writeFile(weeklyPath, JSON.stringify(weekly, null, 2), err => {
-        if (err) console.error("Failed to write xp_weekly.json:", err);
-      });
-
-    }
+    });
   } catch (err) {
-    console.error('Error in messageCreate handler:', err);
+    console.error("Error in messageCreate handler:", err);
   }
 });
 
