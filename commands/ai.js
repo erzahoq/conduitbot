@@ -71,6 +71,73 @@ function generateTextHigherOrder(markovChain, startKeys, order, length = 200) {
     return sentence;
 }
 
+// replaced: fix unbalanced parentheses-only with a general fixer for (), " and '
+function fixUnbalancedPairs(text) {
+    // 1) parentheses: prepend '(' for unmatched ')' and append ')' for unmatched '('
+    let parenBalance = 0;
+    let missingOpensAtStart = 0;
+
+    for (const ch of text) {
+        if (ch === '(') {
+            parenBalance++;
+        } else if (ch === ')') {
+            if (parenBalance === 0) {
+                missingOpensAtStart++;
+            } else {
+                parenBalance--;
+            }
+        }
+    }
+
+    let prefix = '('.repeat(missingOpensAtStart);
+    let suffix = ')'.repeat(parenBalance);
+    text = prefix + text + suffix;
+
+    // 2) double quotes: if odd count, decide to prepend or append using context
+    const dqIndices = [];
+    for (let i = 0; i < text.length; i++) {
+        if (text[i] === '"') dqIndices.push(i);
+    }
+    if (dqIndices.length % 2 === 1) {
+        const firstIdx = dqIndices[0];
+        const before = firstIdx > 0 ? text[firstIdx - 1] : null;
+        // heuristic: if char before first quote is non-whitespace and not an opening bracket,
+        // treat the first quote as a closing quote and prepend a quote at start; otherwise append at end.
+        const shouldPrepend = !!before && !/[\s\(\[\{]/.test(before);
+        if (shouldPrepend) {
+            text = '"' + text;
+        } else {
+            text = text + '"';
+        }
+    }
+
+    // 3) single quotes: ignore apostrophes inside words (like don't). Balance the rest similarly.
+    const sqIndices = [];
+    for (let i = 0; i < text.length; i++) {
+        if (text[i] === "'") {
+            const prev = i > 0 ? text[i - 1] : '';
+            const next = i < text.length - 1 ? text[i + 1] : '';
+            const prevIsAlnum = /[A-Za-z0-9]/.test(prev);
+            const nextIsAlnum = /[A-Za-z0-9]/.test(next);
+            // skip apostrophes embedded in words
+            if (prevIsAlnum && nextIsAlnum) continue;
+            sqIndices.push(i);
+        }
+    }
+    if (sqIndices.length % 2 === 1) {
+        const firstIdx = sqIndices[0];
+        const before = firstIdx > 0 ? text[firstIdx - 1] : null;
+        const shouldPrepend = !!before && !/[\s\(\[\{]/.test(before);
+        if (shouldPrepend) {
+            text = "'" + text;
+        } else {
+            text = text + "'";
+        }
+    }
+
+    return text;
+}
+
 // ====== reload chain from file (rate-limited) ======
 function reloadMarkovFromFile(force = false) {
     const now = Date.now();
@@ -180,6 +247,9 @@ module.exports = {
             Math.floor(Math.random() * 7 + 10)
         );
 
-        await interaction.reply(generatedText);
+        // fix unbalanced parentheses/quotes before replying
+        const fixedText = fixUnbalancedPairs(generatedText);
+
+        await interaction.reply(fixedText);
     }
 };
