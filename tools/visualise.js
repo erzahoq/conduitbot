@@ -178,21 +178,21 @@ const graph = buildSubgraph(markovChain, seedKeys, {
 });
 
 fs.writeFileSync(
-  path.join(__dirname, '..', 'web', 'graph.json'),
+  path.join(__dirname, '..', 'docs', 'graph.json'),
   JSON.stringify(graph, null, 2),
   'utf8'
 );
 
-console.log(`[export] wrote web/graph.json (${graph.nodes.length} nodes, ${graph.edges.length} edges)`);
+console.log(`[export] wrote docs/graph.json (${graph.nodes.length} nodes, ${graph.edges.length} edges)`);
 
 
 const nextIndex = buildNextIndex(markovChain, 80);
 
 fs.writeFileSync(
-  path.join(__dirname, '..', 'web', 'next_index.json'),
+  path.join(__dirname, '..', 'docs', 'next_index.json'),
   JSON.stringify({ order, nextIndex }, null, 2),
   'utf8'
 );
 
-console.log(`[export] wrote web/next_index.json (${Object.keys(nextIndex).length} keys)`);
+console.log(`[export] wrote docs/next_index.json (${Object.keys(nextIndex).length} keys)`);
 
