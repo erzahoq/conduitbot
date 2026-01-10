@@ -1,0 +1,81 @@
+{
+  "nodes": [
+    {
+      "data": {
+        "id": "problems that",
+        "label": "problems that"
+      }
+    },
+    {
+      "data": {
+        "id": "that weren't",
+        "label": "that weren't"
+      }
+    },
+    {
+      "data": {
+        "id": "weren't weeded",
+        "label": "weren't weeded"
+      }
+    },
+    {
+      "data": {
+        "id": "weeded out",
+        "label": "weeded out"
+      }
+    },
+    {
+      "data": {
+        "id": "out at",
+        "label": "out at"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "data": {
+        "id": "e0",
+        "source": "problems that",
+        "target": "that weren't",
+        "weight": 1,
+        "nextToken": "weren't"
+      }
+    },
+    {
+      "data": {
+        "id": "e1",
+        "source": "that weren't",
+        "target": "weren't weeded",
+        "weight": 1,
+        "nextToken": "weeded"
+      }
+    },
+    {
+      "data": {
+        "id": "e2",
+        "source": "weren't weeded",
+        "target": "weeded out",
+        "weight": 1,
+        "nextToken": "out"
+      }
+    },
+    {
+      "data": {
+        "id": "e3",
+        "source": "weeded out",
+        "target": "out at",
+        "weight": 1,
+        "nextToken": "at"
+      }
+    }
+  ],
+  "meta": {
+    "start": "problems that",
+    "opts": {
+      "hops": 4,
+      "topK": 10,
+      "minCount": 1,
+      "maxNodes": 1200
+    }
+  }
+}

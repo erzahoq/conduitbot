@@ -1,0 +1,612 @@
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Markov Chain Viewer</title>
+    <style>
+        :root {
+            --bg: #0b0f14;
+            --panel: #0f1622;
+            --panel2: #111a2a;
+            --border: rgba(255,255,255,.08);
+            --text: rgba(255,255,255,.88);
+            --muted: rgba(255,255,255,.65);
+            --accent: #77a7ff;
+            --accent2: #6ee7ff;
+        }
+
+        html, body {
+            height: 100%;
+            margin: 0;
+            font-family: system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+        }
+
+        #topbar {
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+            position: relative;
+            z-index: 1000;
+            background: linear-gradient(180deg, rgba(255,255,255,.04), transparent);
+            backdrop-filter: blur(6px);
+        }
+
+        #cy {
+            height: calc(100% - 60px);
+            width: 100%;
+        }
+
+        .pill {
+            padding: 4px 10px;
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            background: rgba(255,255,255,.03);
+            color: var(--muted);
+        }
+
+        button {
+            padding: 6px 10px;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            background: rgba(255,255,255,.04);
+            color: var(--text);
+            cursor: pointer;
+        }
+
+        #prompt{
+            padding: 6px 10px;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            background: rgba(255,255,255,.03);
+            color: var(--text);
+            outline: none;
+            min-width: 220px;
+            }
+            #prompt::placeholder{ color: rgba(255,255,255,.45); }
+            #prompt:focus{
+            border-color: rgba(255,255,255,.22);
+            background: rgba(255,255,255,.05);
+            }
+
+
+        button:hover {
+            border-color: rgba(255,255,255,.18);
+            background: rgba(255,255,255,.06);
+        }
+
+        button:active {
+            transform: translateY(1px);
+        }
+
+        /* panel */
+        #panel {
+            background: linear-gradient(180deg, var(--panel), var(--panel2));
+            border: 1px solid var(--border);
+            box-shadow: 0 12px 50px rgba(0,0,0,.55);
+        }
+    </style>
+
+    <!-- Cytoscape CDN -->
+    <script src="https://unpkg.com/cytoscape@3.27.0/dist/cytoscape.min.js"></script>
+</head>
+
+<body>
+    <div id="topbar">
+        <span class="pill" id="meta"></span>
+        <button id="fit">Fit</button>
+        <button id="reflow">Reflow</button>
+        <input id="prompt" placeholder='prompt (e.g. "apart from")' />
+        <button id="regen">Regenerate</button>
+        <button id="regenClear" title="clear prompt">✕</button>
+
+        <span class="pill" id="hover"></span>
+    </div>
+
+    <div id="panel" style="position:fixed; right:12px; top:72px; width:320px; max-height:70vh; overflow:auto; color:var(--text); border-radius:12px; padding:10px; display:none; z-index:2000;">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+            <div id="panelTitle" style="font-weight:700;"></div>
+            <button id="panelClose">x</button>
+        </div>
+
+        <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">
+            <button id="drawAll" style="padding:4px 8px;">Draw all (top 25)</button>
+        </div>
+
+        <div id="panelBody" style="margin-top:8px; font-size:13px; line-height:1.35;"></div>
+    </div>
+
+    <div id="cy"></div>
+
+    <script>
+        async function main() {
+            // cache-bust while testing so you don't fight 304s
+            const graph = await (await fetch('./graph.json?ts=' + Date.now())).json();
+            const lookup = await (await fetch('./next_index.json?ts=' + Date.now())).json();
+
+            const ORDER = lookup.order || 2;
+            const NEXT = lookup.nextIndex || {};
+            console.log('[init] NEXT keys:', Object.keys(NEXT).length, 'order:', ORDER);
+
+            function pickInterestingKey(NEXT, minOut = 8) {
+                const keys = Object.keys(NEXT);
+                for (let tries = 0; tries < 200; tries++) {
+                    const k = keys[Math.floor(Math.random() * keys.length)];
+                    if ((NEXT[k]?.next?.length || 0) >= minOut) return k;
+                }
+                return keys[Math.floor(Math.random() * keys.length)];
+            }
+
+            function pickKeyFromPrompt(NEXT, prompt, minOut = 8) {
+            const keys = Object.keys(NEXT);
+            const p = (prompt || '').trim().toLowerCase();
+
+            // If empty prompt -> your current behavior
+            if (!p) return pickInterestingKey(NEXT, minOut);
+
+            // Match keys containing the prompt
+            const matched = keys.filter(k => k.toLowerCase().includes(p));
+
+            // Prefer “interesting” matches (lots of outgoing options)
+            const interesting = matched.filter(k => (NEXT[k]?.next?.length || 0) >= minOut);
+
+            const pool = interesting.length ? interesting : (matched.length ? matched : keys);
+            return pool[Math.floor(Math.random() * pool.length)];
+            }
+
+
+            function placeNear(sourceId, newId) {
+                const src = cy.getElementById(sourceId);
+                const n = cy.getElementById(newId);
+                if (!src.length || !n.length) return;
+
+                // only place if the node is "new" / hasn't been positioned
+                const p = src.position();
+                const angle = Math.random() * Math.PI * 2;
+                const radius = 90 + Math.random() * 60;
+
+                n.position({
+                    x: p.x + Math.cos(angle) * radius,
+                    y: p.y + Math.sin(angle) * radius
+                });
+            }
+
+            function buildElementsFromNext(startKey, hops = 4, topK = 10, minCount = 1, maxNodes = 1200) {
+                const visited = new Set([startKey]);
+                const q = [{ key: startKey, d: 0 }];
+                const edges = [];
+
+                while (q.length && visited.size < maxNodes) {
+                    const { key, d } = q.shift();
+                    if (d >= hops) continue;
+
+                    const rec = NEXT[key];
+                    if (!rec || !rec.next) continue;
+
+                    const total = rec.total || 0;
+                    const options = rec.next
+                        .filter(([tok, count]) => count >= minCount)
+                        .slice(0, topK);
+
+                    for (const [nextToken, count] of options) {
+                        const parts = key.split(' ');
+                        const target = [...parts.slice(1), nextToken].join(' ');
+                        const prob = total > 0 ? count / total : 0;
+
+                        edges.push({
+                            data: {
+                                id: `e:${encodeURIComponent(key)}=>${encodeURIComponent(target)}`,
+                                source: key,
+                                target,
+                                weight: count,
+                                prob,
+                                nextToken
+                            }
+                        });
+
+                        if (!visited.has(target)) {
+                            visited.add(target);
+                            if (visited.size >= maxNodes) break;
+                            q.push({ key: target, d: d + 1 });
+                        }
+                    }
+                }
+
+                const nodes = Array.from(visited).map(id => ({ data: { id, label: id } }));
+                return { nodes, edges };
+            }
+
+            function replaceGraph(cy, elements, startKey) {
+                cy.elements().remove();
+                cy.add([...elements.nodes, ...elements.edges]);
+
+                // (re)run layout
+                cy.layout({ name: 'cose', animate: true, randomize: true, idealEdgeLength: 110, nodeRepulsion: 14000 }).run();
+
+                // update meta
+                document.getElementById('meta').textContent =
+                    `start: "${startKey}" | nodes=${elements.nodes.length} edges=${elements.edges.length} | hops=4 topK=10 minCount=1`;
+            }
+
+            document.getElementById('meta').textContent =
+                `start: "${graph.meta.start}" | nodes=${graph.nodes.length} edges=${graph.edges.length} | hops=${graph.meta.opts.hops} topK=${graph.meta.opts.topK} minCount=${graph.meta.opts.minCount}`;
+
+            const panel = document.getElementById('panel');
+            const panelTitle = document.getElementById('panelTitle');
+            const panelBody = document.getElementById('panelBody');
+            document.getElementById('panelClose').onclick = () => {
+                panel.style.display = 'none';
+                cy.elements().removeClass('highlight dim');
+            };
+
+            function fmtPct(x) {
+                return (x * 100).toFixed(x >= 0.1 ? 1 : 2) + '%';
+            }
+
+            function nextKeyFrom(key, nextToken) {
+                const parts = key.split(' ');
+                return [...parts.slice(1), nextToken].join(' ');
+            }
+
+
+            const HIGHLIGHT = '#eab308'; // golden yellow
+
+                        // Node colours by entropy (low → high)
+            const ENT_A = '#b45309'; // amber / bronze
+            const ENT_B = '#9333ea'; // purple
+            const ENT_C = '#2563eb'; // deep blue
+
+            const EDGE_LOW  = '#2a2a35'; // near-background graphite
+            const EDGE_HIGH = '#f97316'; // orange (attention-grabbing but warm)
+
+
+            // Cytoscape init
+            const cy = cytoscape({
+                container: document.getElementById('cy'),
+                elements: [...graph.nodes, ...graph.edges],
+                style: [
+                    {
+                        selector: 'node',
+                        style: {
+                            'background-color': 'data(fill)',
+                            'border-width': 1,
+                            'border-color': 'data(stroke)',
+                            'label': 'data(label)',
+                            'font-size': 10,
+                            'color': 'rgba(255,255,255,0.78)',
+                            'text-outline-width': 2,
+                            'text-outline-color': 'rgba(7,10,16,0.95)',
+                            'text-wrap': 'wrap',
+                            'text-max-width': 120,
+                            'width': 30,
+                            'height': 30
+                        }
+                    },
+                    {
+                        selector: 'edge',
+                        style: {
+                            'curve-style': 'bezier',
+                            'target-arrow-shape': 'triangle',
+                            'arrow-scale': 0.8,
+                            'width': 'mapData(prob, 0, 1, 0.4, 6)',
+                            'opacity': 'mapData(prob, 0, 1, 0.15, 0.85)',
+                            'line-color': 'data(color)',
+                            'target-arrow-color': 'data(color)'
+                        }
+                    },
+                    {
+                        selector: '.highlight',
+                        style: {
+                            'background-color': HIGHLIGHT,
+                            'border-width': 2,
+                            'border-color': HIGHLIGHT,
+                            'line-color': HIGHLIGHT,
+                            'target-arrow-color': HIGHLIGHT,
+                            'opacity': 1
+                        }
+                    },
+                    {
+                        selector: '.dim',
+                        style: {
+                            'opacity': 0.15
+                        }
+                    }
+                ],
+                layout: {
+                    name: 'cose',
+                    animate: true,
+                    randomize: true,
+                    idealEdgeLength: 100,
+                    nodeRepulsion: 12000
+                }
+            });
+
+            const promptEl = document.getElementById('prompt');
+
+            function doRegen() {
+            const prompt = promptEl.value;
+            const startKey = pickKeyFromPrompt(NEXT, prompt, 8);
+            console.log('[regen] prompt=', JSON.stringify(prompt), 'start=', startKey);
+
+            const elements = buildElementsFromNext(startKey, 4, 10, 1, 1200);
+            replaceGraph(cy, elements, startKey);
+
+            // show prompt in meta
+            const p = (prompt || '').trim();
+            if (p) document.getElementById('meta').textContent += ` | prompt="${p}"`;
+            }
+
+            document.getElementById('regen').onclick = doRegen;
+
+            // Enter key in prompt box = regenerate
+            promptEl.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') doRegen();
+            });
+
+            // Clear button
+            document.getElementById('regenClear').onclick = () => {
+            promptEl.value = '';
+            doRegen();
+            };
+
+
+            // Compute per-edge probability for the currently drawn subgraph
+            cy.nodes().forEach(n => {
+                const outEdges = n.outgoers('edge');
+                const total = outEdges.reduce((s, e) => s + (e.data('weight') || 0), 0);
+                outEdges.forEach(e => {
+                    const w = e.data('weight') || 0;
+                    e.data('prob', total > 0 ? (w / total) : 0);
+                });
+            });
+
+            // Entropy (predictability) based on drawn subgraph probs
+            function entropy(probs) {
+                let h = 0;
+                for (const p of probs) if (p > 0) h -= p * Math.log2(p);
+                return h;
+            }
+
+            cy.nodes().forEach(n => {
+                const probs = n.outgoers('edge').map(e => e.data('prob') || 0);
+                n.data('entropy', entropy(probs));
+            });
+
+            // Map node size by entropy
+            cy.style()
+                .selector('node')
+                .style({
+                    'width': 'mapData(entropy, 0, 6, 22, 60)',
+                    'height': 'mapData(entropy, 0, 6, 22, 60)'
+                })
+                .update();
+
+            // --- Color theming ---
+            function lerp(a, b, t) { return a + (b - a) * t; }
+            function clamp01(x) { return Math.max(0, Math.min(1, x)); }
+            function hex(r, g, b) {
+                const to = v => v.toString(16).padStart(2, '0');
+                return `#${to(r)}${to(g)}${to(b)}`;
+            }
+            function lerpHex(c1, c2, t) {
+                const a = c1.match(/\w\w/g).map(x => parseInt(x, 16));
+                const b = c2.match(/\w\w/g).map(x => parseInt(x, 16));
+                const r = Math.round(lerp(a[0], b[0], t));
+                const g = Math.round(lerp(a[1], b[1], t));
+                const bl = Math.round(lerp(a[2], b[2], t));
+                return hex(r, g, bl);
+            }
+            
+            let maxOut = 1;
+            cy.nodes().forEach(n => {
+                const out = n.outgoers('edge').length;
+                if (out > maxOut) maxOut = out;
+            });
+
+            cy.nodes().forEach(n => {
+                const h = n.data('entropy') || 0;
+                const t = clamp01(h / 6);
+                const fill = (t < 0.5)
+                    ? lerpHex(ENT_A, ENT_B, t / 0.5)
+                    : lerpHex(ENT_B, ENT_C, (t - 0.5) / 0.5);
+
+                const outDeg = n.outgoers('edge').length;
+                const d = clamp01(outDeg / maxOut);
+                const stroke = lerpHex('#1f2937', '#94a3b8', d);
+
+                n.data('fill', fill);
+                n.data('stroke', stroke);
+            });
+
+            cy.edges().forEach(e => {
+                const p = e.data('prob') || 0;
+                const t = clamp01(p / 0.25);
+                e.data('color', lerpHex(EDGE_LOW, EDGE_HIGH, t));
+            });
+
+            cy.style().update();
+
+            // Hover info
+            const hover = document.getElementById('hover');
+            cy.on('mouseover', 'node', (evt) => {
+                const n = evt.target;
+                const outEdges = n.outgoers('edge');
+                const total = outEdges.reduce((s, e) => s + (e.data('weight') || 0), 0);
+                hover.textContent = `${n.id()} | outWeight(subgraph)=${total} | outEdges(subgraph)=${outEdges.length}`;
+            });
+            cy.on('mouseout', 'node', () => hover.textContent = '');
+
+            // Helper: add a node/edge to the currently drawn graph (optional)
+            function ensureNode(id) {
+                if (cy.getElementById(id).length) return;
+                cy.add({ data: { id, label: id } });
+            }
+
+            function ensureEdge(source, target, weight, prob, nextToken) {
+                const eid = `dyn:${encodeURIComponent(source)}=>${encodeURIComponent(target)}`;
+                if (cy.getElementById(eid).length) return;
+                cy.add({
+                    data: { id: eid, source, target, weight, prob, nextToken }
+                });
+            }
+
+            // NODE CLICK: pull from full chain lookup (dynamic)
+            cy.on('tap', 'node', (evt) => {
+                const n = evt.target;
+                const key = n.id();
+
+                // highlight what exists in the drawn subgraph
+                cy.elements().removeClass('highlight dim');
+                cy.elements().addClass('dim');
+
+                n.removeClass('dim').addClass('highlight');
+                n.outgoers().removeClass('dim').addClass('highlight');
+                n.incomers().removeClass('dim');
+
+                panelTitle.textContent = key;
+
+                const rec = NEXT[key];
+                if (!rec) {
+                    panelBody.innerHTML = `<div style="opacity:.8">No full-chain data for this key (maybe it wasn't in the original chain build).</div>`;
+                    panel.style.display = 'block';
+                    return;
+                }
+
+                const total = rec.total || 0;
+                const rows = (rec.next || []).map(([nextToken, count]) => {
+                    const prob = total > 0 ? count / total : 0;
+                    const target = nextKeyFrom(key, nextToken);
+                    return { nextToken, count, prob, target };
+                });
+
+                const drawAllBtn = document.getElementById('drawAll');
+                drawAllBtn.onclick = (ev) => {
+                    ev.preventDefault();
+                    ev.stopPropagation();
+
+                    const LIMIT = 25;
+                    const subset = rows.slice(0, LIMIT);
+
+                    console.log(`[panel] drawAll ${subset.length} from`, key);
+
+                    let added = 0;
+                    for (const r of subset) {
+                        const target = r.target;
+                        const already = cy.getElementById(target).length;
+                        ensureNode(key);
+                        ensureNode(target);
+                        ensureEdge(key, target, r.count, r.prob, r.nextToken);
+
+                        if (!already) {
+                            placeNear(key, target);
+                            added++;
+                        }
+                    }
+
+                    cy.animate({ center: { eles: cy.getElementById(key) } }, { duration: 150 });
+                    hover.textContent = `drawAll added ${added} new nodes`;
+                };
+
+                const top = rows.slice(0, 15);
+
+                panelBody.innerHTML = [
+                    `<div style="opacity:.9; margin-bottom:8px;">Full-chain outgoing total: <b>${total}</b> | showing top <b>${top.length}</b></div>`,
+                    `<ol style="margin:0; padding-left:18px;">`,
+                    ...top.map(r => `
+                        <li style="margin:6px 0;">
+                            <div><b>${r.nextToken}</b> → <span style="opacity:.9">${r.target}</span></div>
+                            <div style="opacity:.85">${fmtPct(r.prob)} <span style="opacity:.7">(count ${r.count})</span>
+                                <button data-jump="${r.target}" style="margin-left:8px; padding:2px 6px;">jump</button>
+                                <button data-add="${r.nextToken}" style="margin-left:6px; padding:2px 6px;">draw</button>
+                            </div>
+                        </li>
+                    `),
+                    `</ol>`,
+                    `<div style="opacity:.7; margin-top:10px;">
+                        “jump” centers on that state if it exists in the drawn subgraph. “draw” adds it + an edge to the graph.
+                    </div>`
+                ].join('');
+
+                panel.style.display = 'block';
+
+                // button handlers inside the panel
+                panelBody.querySelectorAll('button[data-jump]').forEach(btn => {
+                    btn.addEventListener('click', (ev) => {
+                        ev.preventDefault();
+                        ev.stopPropagation();
+                        const target = btn.getAttribute('data-jump');
+                        console.log('[panel] jump clicked:', target);
+
+                        let el = cy.getElementById(target);
+
+                        if (!el.length) {
+                            const row = rows.find(r => r.target === target);
+                            if (row) {
+                                ensureNode(key);
+                                const wasNew = !cy.getElementById(target).length;
+                                ensureNode(target);
+                                ensureEdge(key, target, row.count, row.prob, row.nextToken);
+                                if (wasNew) placeNear(key, target);
+                                el = cy.getElementById(target);
+                            }
+                        }
+
+                        if (el.length) {
+                            cy.animate({ center: { eles: el }, zoom: Math.max(cy.zoom(), 1.3) }, { duration: 250 });
+                            cy.elements().removeClass('highlight');
+                            el.addClass('highlight');
+                            el.outgoers().addClass('highlight');
+                        } else {
+                            alert("Couldn't draw/jump to that node (not found).");
+                        }
+                    });
+                });
+
+                panelBody.querySelectorAll('button[data-add]').forEach(btn => {
+                    btn.addEventListener('click', (ev) => {
+                        ev.preventDefault();
+                        ev.stopPropagation();
+
+                        const nextToken = btn.getAttribute('data-add');
+                        const target = nextKeyFrom(key, nextToken);
+
+                        const rec2 = NEXT[key];
+                        const total2 = rec2?.total || 0;
+                        const found = (rec2?.next || []).find(([t]) => t === nextToken);
+                        const count = found ? found[1] : 0;
+                        const prob = total2 > 0 ? count / total2 : 0;
+
+                        ensureNode(key);
+                        const wasNew = !cy.getElementById(target).length;
+                        ensureNode(target);
+                        ensureEdge(key, target, count, prob, nextToken);
+
+                        if (wasNew) placeNear(key, target);
+                    });
+                });
+            });
+
+            // Edge click details
+            cy.on('tap', 'edge', (evt) => {
+                const e = evt.target;
+                alert(`${e.data('source')} -> ${e.data('target')}\nnextToken="${e.data('nextToken')}"\ncount=${e.data('weight')}\nprob=${(e.data('prob')*100).toFixed(2)}%`);
+            });
+
+            document.getElementById('fit').onclick = () => cy.fit(undefined, 30);
+            document.getElementById('reflow').onclick = () => {
+                cy.layout({ name: 'cose', animate: true, randomize: true, idealEdgeLength: 110, nodeRepulsion: 14000 }).run();
+            };
+        }
+
+        main().catch(err => {
+            document.getElementById('meta').textContent = 'Failed to load graph.json / next_index.json';
+            console.error(err);
+        });
+    </script>
+
+</body>
+</html>

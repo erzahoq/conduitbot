@@ -228,10 +228,6 @@ client.on("messageCreate", async (message) => {
         const newXP = xpData[userId].xp;
         const newLevel = getLevelFromXP(newXP);
 
-        console.log(
-          `Gave ${xpGain} XP to user ${message.author.tag} (Total: ${newXP}, mult: ${multiplier})`
-        );
-
         // write both atomically
         await writeJsonAtomic(xpDataPath, xpData);
         await writeJsonAtomic(weeklyPath, weekly);
