@@ -4,5 +4,7 @@ xp.json
 package-lock.json
 package.json
 node_modules
-data
 .env
+xp_roles.json
+xp_weekly.json.bak
+xp.json.bak
