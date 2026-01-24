@@ -20,53 +20,58 @@ function tokenize(text) {
     // - Punctuation as separate tokens (.,!?;:()[]{}" etc.)
     //
     // Note: This is intentionally "simple but good".
+    // Adds emoticons like :3, :D, :) , ;-;, etc. as single tokens
+    // and includes ":" as punctuation so it doesn't get lost.
     const re =
-        /https?:\/\/\S+|<a?:\w+:\d+>|<[@#&]!?[\d]+>|[A-Za-z0-9]+(?:'[A-Za-z0-9]+)*|[.,!?;:()[\]{}"“”‘’\-–—…]/g;
+        /https?:\/\/\S+|<a?:\w+:\d+>|<[@#&]!?[\d]+>|[:;=8xX][\-oO\^']?[\)\]\(\[dDpP3/\\\|*><]|[A-Za-z0-9]+(?:'[A-Za-z0-9]+)*|[.,!?;:()[\]{}"“”‘’\-–—…]/g;
 
     return text.match(re) ?? [];
 }
 
 function detokenize(tokens) {
     let out = '';
-    let lastWasOpeningQuote = false;
+    let stickNext = false; // for opening quotes/brackets
 
     for (const t of tokens) {
 
-        // Closing punctuation: no space before
+        // Closing punctuation / closing brackets → no space before
         if (/^[.,!?;:\)\]\}…]+$/.test(t)) {
             out += t;
-            lastWasOpeningQuote = false;
+            stickNext = false;
             continue;
         }
 
-        // Opening brackets
+        // Opening brackets → stick to next token
         if (/^[\(\[\{]+$/.test(t)) {
             out += (out && !out.endsWith(' ') ? ' ' : '') + t;
-            lastWasOpeningQuote = false;
+            stickNext = true;
             continue;
         }
 
-        // Opening quotes
+        // Opening quotes → stick to next token
         if (/^[“"‘']$/.test(t)) {
             out += (out && !out.endsWith(' ') ? ' ' : '') + t;
-            lastWasOpeningQuote = true;
+            stickNext = true;
             continue;
         }
 
-        // Closing quotes
-        if (/^[”"’']$/.test(t) && lastWasOpeningQuote === false) {
+        // Closing quotes → stick to previous token
+        if (/^[”"’']$/.test(t) && !stickNext) {
             out += t;
             continue;
         }
 
-        // Normal word
-        if (lastWasOpeningQuote) {
-            out += t; // no space after opening quote
-            lastWasOpeningQuote = false;
+        // Normal token
+        if (stickNext) {
+            out += t; // no space after opening bracket/quote
+            stickNext = false;
         } else {
             out += (out && !out.endsWith(' ') ? ' ' : '') + t;
         }
     }
+
+    // after detokenize
+    out = out.replace(/\(\s+/g, '(').replace(/\s+\)/g, ')');
 
     return out.replace(/\s{2,}/g, ' ').trim();
 }
