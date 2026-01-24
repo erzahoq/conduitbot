@@ -5,8 +5,8 @@ const { loadMultipliers, saveMultipliers } = require("../helpers/xpmult");
 
 // Only these user IDs can use /xpmult commands
 const ALLOWED_USERS = [
-  "717099413138440252", // you
-  "535478766739259436", // others if needed
+  "717099413138440252",
+  "535478766739259436",
 ];
 
 /* ---------------- SLASH COMMAND ---------------- */
@@ -179,33 +179,25 @@ module.exports = {
 
       const fmtVal = v => `${v}x`;
 
-      const roleEntries = Object.entries(mults.roles || {});
-      const channelEntries = Object.entries(mults.channels || {});
-      const userEntries = Object.entries(mults.users || {});
+      const roleEntries = Object.entries(mults.roles || {}).sort((a, b) => b[1] - a[1]);
+      const channelEntries = Object.entries(mults.channels || {}).sort((a, b) => b[1] - a[1]);
+      const userEntries = Object.entries(mults.users || {}).sort((a, b) => b[1] - a[1]);
 
-      const roleText =
-        roleEntries.length === 0
-          ? "_None_"
-          : roleEntries
-              .sort((a, b) => b[1] - a[1])
-              .map(([id, val]) => `• <@&${id}> → **${fmtVal(val)}**`)
-              .join("\n");
+      const roleLines = roleEntries.length
+        ? buildLinesFromEntries(roleEntries, (id, val) => `• <@&${id}> → **${fmtVal(val)}**`)
+        : [`_None_`];
 
-      const channelText =
-        channelEntries.length === 0
-          ? "_None_"
-          : channelEntries
-              .sort((a, b) => b[1] - a[1])
-              .map(([id, val]) => `• <#${id}> → **${fmtVal(val)}**`)
-              .join("\n");
+      const channelLines = channelEntries.length
+        ? buildLinesFromEntries(channelEntries, (id, val) => `• <#${id}> → **${fmtVal(val)}**`)
+        : [`_None_`];
 
-      const userText =
-        userEntries.length === 0
-          ? "_None_"
-          : userEntries
-              .sort((a, b) => b[1] - a[1])
-              .map(([id, val]) => `• <@${id}> → **${fmtVal(val)}**`)
-              .join("\n");
+      const userLines = userEntries.length
+        ? buildLinesFromEntries(userEntries, (id, val) => `• <@${id}> → **${fmtVal(val)}**`)
+        : [`_None_`];
+
+      const roleChunks = chunkLinesToFields(roleLines);
+      const channelChunks = chunkLinesToFields(channelLines);
+      const userChunks = chunkLinesToFields(userLines);
 
       const embed = new EmbedBuilder()
         .setTitle("XP Multiplier Configuration")
@@ -216,24 +208,79 @@ module.exports = {
             `**Stacking mode:** \`${mults.stackingMode || "max"}\``,
           ].join("\n")
         )
-        .addFields(
-          {
-            name: "Role multipliers",
-            value: roleText,
-            inline: false,
-          },
-          {
-            name: "Channel multipliers",
-            value: channelText,
-            inline: false,
-          },
-          {
-            name: "User multipliers",
-            value: userText,
-            inline: false,
-          }
-        )
         .setFooter({ text: "Values are applied when XP is awarded." });
+
+      // Add fields, splitting across multiple fields if needed
+      const fields = [];
+
+      // Helper to push chunked fields with nice names
+      function pushChunkedFields(baseName, chunks) {
+        if (chunks.length === 1) {
+          fields.push({ name: baseName, value: chunks[0], inline: false });
+          return;
+        }
+        chunks.forEach((chunk, i) => {
+          fields.push({
+            name: `${baseName} (page ${i + 1}/${chunks.length})`,
+            value: chunk,
+            inline: false,
+          });
+        });
+      }
+
+      pushChunkedFields("Role multipliers", roleChunks);
+      pushChunkedFields("Channel multipliers", channelChunks);
+      pushChunkedFields("User multipliers", userChunks);
+
+      // Respect the 25-field limit. If we exceed, fall back to a text file.
+      if (fields.length > MAX_FIELDS) {
+        const text = [
+          `Default multiplier: ${mults.default ?? 1}x`,
+          `Stacking mode: ${mults.stackingMode || "max"}`,
+          "",
+          "== Role multipliers ==",
+          ...roleLines,
+          "",
+          "== Channel multipliers ==",
+          ...channelLines,
+          "",
+          "== User multipliers ==",
+          ...userLines,
+          "",
+        ].join("\n");
+
+        return interaction.reply({
+          content: "Too many multipliers to fit in an embed — here’s a text export:",
+          files: [{ attachment: Buffer.from(text, "utf8"), name: "xp-multipliers.txt" }],
+          ephemeral: false,
+        });
+      }
+
+      embed.addFields(fields);
+
+      // If the embed is still huge overall, fall back to text file
+      if (approxEmbedSize(embed) > 5500) {
+        const text = [
+          `Default multiplier: ${mults.default ?? 1}x`,
+          `Stacking mode: ${mults.stackingMode || "max"}`,
+          "",
+          "== Role multipliers ==",
+          ...roleLines,
+          "",
+          "== Channel multipliers ==",
+          ...channelLines,
+          "",
+          "== User multipliers ==",
+          ...userLines,
+          "",
+        ].join("\n");
+
+        return interaction.reply({
+          content: "Embed got too large — here’s a text export:",
+          files: [{ attachment: Buffer.from(text, "utf8"), name: "xp-multipliers.txt" }],
+          ephemeral: false,
+        });
+      }
 
       return interaction.reply({ embeds: [embed], ephemeral: false });
     }
@@ -389,3 +436,48 @@ module.exports = {
     });
   },
 };
+
+
+const MAX_FIELD_VALUE = 1024;
+const MAX_FIELDS = 25; // Discord embed field limit
+
+function chunkLinesToFields(lines, maxLen = MAX_FIELD_VALUE) {
+  const chunks = [];
+  let buf = "";
+
+  for (const line of lines) {
+    // if a single line is somehow too long, hard-slice it
+    const safeLine = line.length > maxLen ? line.slice(0, maxLen - 1) + "…" : line;
+
+    // +1 for newline if needed
+    const next = buf.length === 0 ? safeLine : `${buf}\n${safeLine}`;
+
+    if (next.length > maxLen) {
+      if (buf.length > 0) chunks.push(buf);
+      buf = safeLine;
+    } else {
+      buf = next;
+    }
+  }
+
+  if (buf.length > 0) chunks.push(buf);
+  return chunks;
+}
+
+function buildLinesFromEntries(entries, lineFn) {
+  return entries.map(([id, val]) => lineFn(id, val));
+}
+
+function approxEmbedSize(embed) {
+  // rough size check (Discord counts characters across title/desc/fields/footer/etc)
+  let size = 0;
+  if (embed.data.title) size += embed.data.title.length;
+  if (embed.data.description) size += embed.data.description.length;
+  if (embed.data.footer?.text) size += embed.data.footer.text.length;
+  if (embed.data.fields) {
+    for (const f of embed.data.fields) {
+      size += (f.name?.length || 0) + (f.value?.length || 0);
+    }
+  }
+  return size;
+}
