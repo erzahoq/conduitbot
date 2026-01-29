@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 require("dotenv").config();
 
-const { cleanExtraNewlines, applyReplacements } = require('./sanitize');
+const { cleanExtraNewlines, applyReplacements, shouldBlockMessage } = require('./sanitize');
 
 const BOT_ID = "1439791725576192110";
 
@@ -79,15 +79,24 @@ async function fetchAllMessages(channel) {
 
         let messageLog = fetchedMessages
         .filter(msg => !msg.author?.bot)
-        .map(msg => {
-            const original = msg.content || '';
-            const sanitized = applyReplacements(original);
-            return sanitized;
-        })
+            .map(msg => {
+                const original = msg.content || '';
+
+                // Block risky content
+                const decision = shouldBlockMessage(original);
+                if (decision.blocked) {
+                    return decision.mode === "replace" ? "<blocked>" : "";
+                }
+
+
+                const sanitized = applyReplacements(original);
+                return sanitized;
+            })
+
         .join('\n');
 
     messageLog = cleanExtraNewlines(messageLog);
-    fs.appendFileSync('./data/message_log.txt', messageLog + '\n');
+    fs.appendFileSync(path.join(__dirname, '..', 'data', 'message_log.txt'), messageLog + '\n');
 
 
 
