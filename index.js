@@ -12,7 +12,6 @@ require('dotenv').config();
 
 const { readJsonSafe, writeJsonAtomic, withFileLock } = require("./helpers/jsonStore");
 
-
 const { sanitizeMessage } = require('./helpers/sanitize');
 const { loadMultipliers, getEffectiveMultiplier } = require("./helpers/xpmult");
 const { handleLevelUpRoles } = require('./helpers/functions');
@@ -45,6 +44,23 @@ client.on('shardReconnecting', shardId => {
   console.log(`Shard ${shardId} reconnecting...`);
 });
 
+// ===== gamble reminder tick setup =====
+const gambleReminderPath = path.join(__dirname, "data", "gamble_reminders.json");
+
+const GAMBLE_REMINDER_LINES = [
+  "🎰 psst… the lever is calling your name.",
+  "🪙 your cooldown expired. financially irresponsible time?",
+  "💎 you are now eligible to make a terrible decision again.",
+  "🔥 the house has reopened. go cause problems.",
+  "✨ reminder: you *could* gamble right now. (you shouldn't.)",
+  "🪦 the cooldown is over. redemption arc?",
+];
+
+function pick(arr) {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+
 
 // load commands from ./commands
 client.commands = new Collection();
@@ -72,6 +88,52 @@ client.once('ready', () => {
         ],
         status: 'online',           // status can be online / idle / dnd / invisible
     });
+        // ===== gamble reminder tick (runs every 60s) =====
+        setInterval(async () => {
+          try {
+            const now = Date.now();
+
+            await withFileLock(gambleReminderPath, async () => {
+              const data = await readJsonSafe(gambleReminderPath, {});
+              let changed = false;
+
+              for (const [userId, entry] of Object.entries(data)) {
+                if (!entry?.enabled) continue;
+                if (!entry?.nextAt) continue;
+
+                const nextAt = Number(entry.nextAt);
+                if (!Number.isFinite(nextAt)) {
+                  data[userId].nextAt = null;
+                  changed = true;
+                  continue;
+                }
+
+                if (now < nextAt) continue;
+
+                // due: try DM
+                try {
+                  const user = await client.users.fetch(userId).catch(() => null);
+                  if (user) {
+                    await user.send(pick(GAMBLE_REMINDER_LINES));
+                  }
+                } catch (e) {
+                  console.warn(`[gamblereminder] DM failed for ${userId}:`, e?.message ?? e);
+                }
+
+                // one-shot: clear nextAt, keep enabled
+                data[userId].nextAt = null;
+                changed = true;
+              }
+
+              if (changed) {
+                await writeJsonAtomic(gambleReminderPath, data);
+              }
+            });
+          } catch (e) {
+            console.error("[gamblereminder] tick error:", e);
+          }
+        }, 600 * 1000);
+
 });
 
 // slash command handling
