@@ -4,7 +4,8 @@ const {
     Partials,
     Collection,
     ActivityType,
-    EmbedBuilder
+    EmbedBuilder,
+    MessageFlags
 } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
@@ -48,12 +49,86 @@ client.on('shardReconnecting', shardId => {
 const gambleReminderPath = path.join(__dirname, "data", "gamble_reminders.json");
 
 const GAMBLE_REMINDER_LINES = [
-  "🎰 psst… the lever is calling your name.",
-  "🪙 your cooldown expired. financially irresponsible time?",
-  "💎 you are now eligible to make a terrible decision again.",
-  "🔥 the house has reopened. go cause problems.",
-  "✨ reminder: you *could* gamble right now. (you shouldn't.)",
-  "🪦 the cooldown is over. redemption arc?",
+  "psst… the lever is calling your name...",
+  "anyone else hear that ominous bell tolling????🤣🤣🤣 no?? just me??????😭😭😭😭😭😭",
+  "your cooldown gamble has finished!",
+  "your gamble cooldown has finished!",
+  "ive been expecting you",
+  "you're welcome!",
+  "time to gamble!",
+  "LETS GO GAMBLING!!",
+  "lets be financially responsible!",
+  "time to gamble!",
+  "you're able to gamble again!",
+  "you're gamble!",
+  "hi dere",
+  "time to make some bad decisions!",
+  "gamble responsibly!",
+  "where does all this milk come from??",
+  "see you in 6 hours!",
+  "lets run this back",
+  "you've been expecting me?",
+  "in soviet russia, the lever pulls you!",
+  "fire in the hole!",
+  "surely this time",
+  "let's get this bread",
+  "wee woo wee woo",
+  "tick tock tick tock ding dong ding dong",
+  "your cooldown expired!",
+  "your cooldown is up!",
+  "boo!",
+  "did you miss me?",
+  "surprise!",
+  "you'll win big this time, i guarantee it!",
+  "gamble gamble gamble gamble",
+  "gaming",
+  "me jumpscare",
+  "gamer moment",
+  "boss blind time",
+  "hey. hey. the lever missed you.",
+  "it's been thinking about you...",
+  "the cooldown forgives you",
+  "you know what time it is!",
+  "the numbers are restless",
+  "the lever yearns...", 
+  "wake up!! gamble time!!",
+  "back at it again!",
+  "this is NOT a drill",
+  "round 2 lets go", 
+  "gambling o'clock!",
+  "its gamblin time!",
+  "spin that thing!",
+  "do it again do it again do it again",
+  "we go again!",
+  "make good choices! (lie)",
+  "statistically speaking, this is fine",
+  "financial advisors hate this one simple trick!",
+  "moderation is key",
+  "nothing bad has ever happened from this",
+  "risk-free activity",
+  "this counts as budgeting",
+  "i am legally required to tell you that it's ready",
+  "cooldown finished btw",
+  "this is a reminder i think",
+  "automated message jumpscare",
+  "you thought this notification was a friend messaging you, but it was me the whole time!!",
+  "user has been notified",
+  "again?",
+  "now.",
+  "your move.",
+  "press it.",
+  "go.",
+  "do it.",
+  "hi hello hi its so good to see youuu",
+  "your awesome did anyone tell you",
+  "🔔",
+  "⏰",
+  "surely nothing goes wrong",
+  "one more for the road",
+  "trust",
+  "fortune favours the bold!",
+  "loaded dice"
+
 ];
 
 function pick(arr) {
@@ -76,7 +151,7 @@ for (const file of commandFiles) {
     }
 }
 
-client.once('ready', () => {
+client.once('clientReady', () => {
     console.log(`Logged in as ${client.user.tag}!`);
 
     client.user.setPresence({
@@ -137,23 +212,51 @@ client.once('ready', () => {
 });
 
 // slash command handling
-client.on('interactionCreate', async interaction => {
-    if (!interaction.isChatInputCommand()) return;
+client.on("interactionCreate", async (interaction) => {
+  try {
+    // ---------- Slash Commands ----------
+    if (interaction.isChatInputCommand()) {
+      const command = interaction.client.commands.get(interaction.commandName);
+      if (!command) return;
 
-    const command = interaction.client.commands.get(interaction.commandName);
-    if (!command) return;
-
-    try {
+      try {
         await command.execute(interaction);
-    } catch (error) {
+      } catch (error) {
         console.error(error);
         if (interaction.replied || interaction.deferred) {
-            await interaction.followUp({ content: 'There was an error while executing this command!', ephemeral: true });
+          await interaction.followUp({
+            content: "There was an error while executing this command!",
+            flags: MessageFlags.Ephemeral,
+          });
         } else {
-            await interaction.reply({ content: 'There was an error while executing this command!', ephemeral: true });
+          await interaction.reply({
+            content: "There was an error while executing this command!",
+            flags: MessageFlags.Ephemeral,
+          });
         }
+      }
+      return;
     }
+
+    // ---------- Buttons ----------
+    if (interaction.isButton()) {
+      // customId format: lb|ownerId|category|page
+      const id = interaction.customId;
+
+      if (id.startsWith("lb|")) {
+        const leaderboardCmd = interaction.client.commands.get("leaderboard");
+        if (leaderboardCmd?.handleButton) {
+          await leaderboardCmd.handleButton(interaction);
+        }
+      }
+
+      return;
+    }
+  } catch (err) {
+    console.error("interactionCreate error:", err);
+  }
 });
+
 
 const logPath = path.join(__dirname, 'data', 'message_log.txt');
 

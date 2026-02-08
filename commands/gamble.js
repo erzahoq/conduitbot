@@ -20,7 +20,21 @@ const FLAVOUR_TIERS = [
     emoji: "🪦",
     title: "absolutely nothing :(",
     lines: ["aw dangit", "this was a terrible decision", "you feel ashamed", "my face when",
-      "i can't believe i just did that", "surely next time", "it is so joever"
+      "i can't believe i just did that", "surely next time", "it is so joever", "well damn", "lets not go gambling ??",
+      "erm", "this is NOT awesome sauce horse emoji", "this thing is evil",
+    "this was a mistake actually",
+    "i regret everything",
+    "my lawyer advised me not to continue",
+    "this run is cursed",
+    "who could have seen this coming",
+    "this hurts spiritually",
+    "the universe laughed",
+    "never again (lying)",
+    "this game hates me",
+    "i've learned nothing","rock bottom speedrun any%",
+    "the numbers are mocking me","skill issue", "skillet shoe",
+    "the house kinda won but not really (what)",
+    "why did i believe","a fool's errand","never punished btw (punished)"
     ],
   },
   {
@@ -36,7 +50,9 @@ const FLAVOUR_TIERS = [
       "it is somewhat over",
       "i guess that's it",
       "that was lame",
-      "better luck next time"
+      "better luck next time",
+      "this buys like nothing","better than nothing i guess","meh","this barely counts",
+      "i see the vision", "we take those?", "it couldve been worse", "i guess", "the grind continues"
     ],
   },
   {
@@ -54,7 +70,13 @@ const FLAVOUR_TIERS = [
       "that was ok",
       "meow",
       "purr",
-      "oo shiny"
+      "oo shiny",
+      "ok yeah that felt good",
+      "this sparks joy","respectable outcome",
+      "the number went up!",
+      "acceptable","this feels intentional",
+      "worth the risk (get it because theres no risk)",
+      "this is a win in my book"
     ],
   },
   {
@@ -63,8 +85,7 @@ const FLAVOUR_TIERS = [
     emoji: "🔥",
     title: "big win",
     lines: ["let's be financially responsible!", "i cant stop winning!", "no credit card debt!", "heads up penny!", "diversified investment portfolio!", "paying bills on time!",
-      "awesome!", "yippee!"
-    ],
+      "awesome!", "yippee!", "oh this is real!!", "i knew it!", "💰💰💰", "huge W!!", "i should do this more!!", "the strategy worked", "im cooking"]
   },
   {
     min: 10000,
