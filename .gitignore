@@ -5,3 +5,5 @@ package.json
 *.json.bak
 *.json
 message_log.txt
+resetGambleReminders.js
+scripts

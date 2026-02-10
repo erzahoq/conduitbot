@@ -4,8 +4,10 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  StringSelectMenuBuilder,
   MessageFlags,
 } = require("discord.js");
+
 
 const fs = require("fs").promises;
 const path = require("path");
@@ -175,18 +177,55 @@ function clampDisplay(str, targetWidth) {
   return out;
 }
 
-function makeLine({ rank, name, xpText, level }) {
-  // widths in "display cells" (best-effort)
+function makeSelectId(ownerId) {
+  return `lbsel|${ownerId}`;
+}
+
+function makeNavId(ownerId, dir) {
+  return `lbnav|${ownerId}|${dir}`; // dir = -1 / +1
+}
+
+function buildComponents(ownerId, category, page, maxPage) {
+  const select = new StringSelectMenuBuilder()
+    .setCustomId(makeSelectId(ownerId))
+    .setPlaceholder("Select leaderboard")
+    .addOptions(
+      { label: "Total XP", value: "total", emoji: "🏆", default: category === "total" },
+      { label: "Weekly XP", value: "weekly", emoji: "📅", default: category === "weekly" },
+      { label: "Most Gambles", value: "gamble", emoji: "🎰", default: category === "gamble" },
+      { label: "Largest Win From Gamble", value: "gamble_best", emoji: "💎", default: category === "gamble_best" }
+    );
+
+  const row1 = new ActionRowBuilder().addComponents(select);
+
+  const prev = new ButtonBuilder()
+    .setCustomId(makeNavId(ownerId, "-1"))
+    .setLabel("←")
+    .setStyle(ButtonStyle.Secondary)
+    .setDisabled(page <= 0);
+
+  const next = new ButtonBuilder()
+    .setCustomId(makeNavId(ownerId, "+1"))
+    .setLabel("→")
+    .setStyle(ButtonStyle.Secondary)
+    .setDisabled(page >= maxPage);
+
+  const row2 = new ActionRowBuilder().addComponents(prev, next);
+
+  return [row1, row2];
+}
+
+
+function makeLine({ rank, name, midText, rightText }) {
   const NAME_W = 26;
-  const XP_W = 7;
+  const MID_W = 7;
 
   const leftRaw = `#${String(rank).padStart(2, " ")} ${name}`;
   const left = padEndDisplay(clampDisplay(leftRaw, NAME_W), NAME_W);
 
-  const xpBox = padEndDisplay(clampDisplay(xpText, XP_W), XP_W);
-  const right = `Lv ${String(level).padStart(2, " ")}`;
+  const midBox = padEndDisplay(clampDisplay(midText, MID_W), MID_W);
 
-  return `\`${left}\` \`${xpBox}\` \`${right}\``;
+  return `\`${left}\` \`${midBox}\` \`${rightText}\``;
 }
 
 
@@ -197,13 +236,46 @@ async function loadEntries(category) {
     const raw = await fs.readFile(weeklyPath, "utf8");
     const weeklyData = JSON.parse(raw);
     const xpData = weeklyData.users || {};
-    return Object.entries(xpData).map(([id, obj]) => [id, Math.floor(obj?.xp ?? 0)]);
+    return Object.entries(xpData).map(([id, obj]) => ({
+      id,
+      value: Math.floor(obj?.xp ?? 0),
+    }));
   }
 
+  if (category === "gamble") {
+    const statsPath = path.join(__dirname, "..", "data", "gamble_stats.json");
+    const raw = await fs.readFile(statsPath, "utf8");
+    const stats = JSON.parse(raw);
+
+    // leaderboard by most gambles (count)
+    return Object.entries(stats).map(([id, obj]) => ({
+      id,
+      value: Math.floor(obj?.count ?? 0),
+    }));
+  }
+
+    if (category === "gamble_best") {
+      const statsPath = path.join(__dirname, "..", "data", "gamble_stats.json");
+      const raw = await fs.readFile(statsPath, "utf8");
+      const stats = JSON.parse(raw);
+
+      // leaderboard by largest single win (best)
+      return Object.entries(stats).map(([id, obj]) => ({
+        id,
+        value: Math.floor(obj?.best ?? 0),
+      }));
+    }
+
+
+  // total
   const xpPath = path.join(__dirname, "..", "data", "xp.json");
   const raw = await fs.readFile(xpPath, "utf8");
   const xpData = JSON.parse(raw);
-  return Object.entries(xpData).map(([id, obj]) => [id, Math.floor(obj?.xp ?? 0)]);
+
+  return Object.entries(xpData).map(([id, obj]) => ({
+    id,
+    value: Math.floor(obj?.xp ?? 0),
+  }));
 }
 
 function buildNameResolver(guild, membersMap) {
@@ -221,12 +293,12 @@ function buildNameResolver(guild, membersMap) {
 async function buildPagesForCategory(interaction, category) {
   const entries = await loadEntries(category);
 
-  // bulk fetch (nice-to-have) + map we can fill as we probe
+  // membersMap is used for filtering + naming
   const members = await interaction.guild.members.fetch().catch(() => null);
   const membersMap = members ?? new Map();
 
-  // probe only needed IDs to confirm membership
-  const ids = [...new Set(entries.map(([id]) => id))];
+  // Confirm membership for IDs we have stats for (important if bulk fetch is incomplete)
+  const ids = [...new Set(entries.map((e) => e.id))];
 
   const presentPairs = await mapWithConcurrency(ids, 8, async (id) => {
     if (membersMap.has(id)) return [id, true];
@@ -243,8 +315,11 @@ async function buildPagesForCategory(interaction, category) {
     presentPairs.filter(Boolean).filter(([, ok]) => ok).map(([id]) => id)
   );
 
-  const filtered = entries.filter(([id]) => presentIds.has(id));
-  filtered.sort((a, b) => b[1] - a[1]);
+  // Filter to present members only
+  const filtered = entries.filter((e) => presentIds.has(e.id));
+
+  // Sort high -> low
+  filtered.sort((a, b) => b.value - a.value);
 
   const resolveName = buildNameResolver(interaction.guild, membersMap);
 
@@ -257,103 +332,66 @@ async function buildPagesForCategory(interaction, category) {
 
     const lines = [];
     for (let i = 0; i < slice.length; i++) {
-      const [userId, xp] = slice[i];
+      const { id: userId, value } = slice[i];
       const rank = start + i + 1;
 
       const name = resolveName(userId, `<@${userId}>`);
-      const level = getLevelFromXP(xp);
-      const xpText = formatNum(xp);
 
-      lines.push(makeLine({ rank, name, xpText, level }));
+        if (category === "gamble" || category === "gamble_best") {
+          const rightText = category === "gamble" ? "gambles" : "best";
+          const midText = category === "gamble"
+            ? String(value)
+            : formatNum(value);
+
+          lines.push(
+            makeLine({
+              rank,
+              name,
+              midText,
+              rightText,
+            })
+          );
+        } else {
+
+        const xp = value;
+        const lvl = getLevelFromXP(xp);
+        lines.push(
+          makeLine({
+            rank,
+            name,
+            midText: formatNum(xp),
+            rightText: `Lv ${String(lvl).padStart(2, " ")}`,
+          })
+        );
+      }
     }
 
-    const title = category === "weekly" ? "🏆 Weekly Leaderboard" : "🏆 Leaderboard";
+        const title =
+      category === "weekly"
+        ? "🏆 Weekly Leaderboard"
+        : category === "gamble"
+        ? "🎰 Gambling Leaderboard"
+        : category === "gamble_best"
+        ? "💎 Largest Win Leaderboard"
+        : "🏆 Leaderboard";
+
+
+        const emptyMsg =
+      category === "gamble" || category === "gamble_best"
+        ? "*No gamble stats yet.*"
+        : "*No data yet.*";
+
 
     const embed = new EmbedBuilder()
       .setTitle(title)
       .setColor(0x4fe4dc)
-      .setDescription(lines.length ? lines.join("\n") : "*No data yet.*")
+      .setDescription(lines.length ? lines.join("\n") : emptyMsg)
       .setFooter({ text: `Page ${page + 1}/${maxPage + 1}` });
 
     embeds.push(embed);
   }
 
   return { embeds, maxPage };
-}
-
-
-
-function makeCustomId(ownerId, category, page) {
-  return `lb|${ownerId}|${category}|${page}`;
-}
-
-function buildComponents(ownerId, category, page, maxPage) {
-  const totalBtn = new ButtonBuilder()
-    .setCustomId(makeCustomId(ownerId, "total", page))
-    .setLabel("Total")
-    .setStyle(category === "total" ? ButtonStyle.Primary : ButtonStyle.Secondary);
-
-  const weeklyBtn = new ButtonBuilder()
-    .setCustomId(makeCustomId(ownerId, "weekly", page))
-    .setLabel("Weekly")
-    .setStyle(category === "weekly" ? ButtonStyle.Primary : ButtonStyle.Secondary);
-
-  const prevBtn = new ButtonBuilder()
-    .setCustomId(makeCustomId(ownerId, category, page - 1))
-    .setLabel("←")
-    .setStyle(ButtonStyle.Secondary)
-    .setDisabled(page <= 0);
-
-  const nextBtn = new ButtonBuilder()
-    .setCustomId(makeCustomId(ownerId, category, page + 1))
-    .setLabel("→")
-    .setStyle(ButtonStyle.Secondary)
-    .setDisabled(page >= maxPage);
-
-  return [new ActionRowBuilder().addComponents(totalBtn, weeklyBtn, prevBtn, nextBtn)];
-}
-
-async function render(interaction, ownerId, category, page) {
-  const entries = await loadEntries(category);
-
-  // OPTIONAL: hide 0 XP users
-  // const filtered = entries.filter(([, xp]) => xp > 0);
-  const filtered = entries;
-
-  filtered.sort((a, b) => b[1] - a[1]);
-
-  const maxPage = Math.max(0, Math.ceil(filtered.length / PAGE_SIZE) - 1);
-  page = clamp(page, 0, maxPage);
-
-  const start = page * PAGE_SIZE;
-  const slice = filtered.slice(start, start + PAGE_SIZE);
-
-  const lines = [];
-  for (let i = 0; i < slice.length; i++) {
-    const [userId, xp] = slice[i];
-    const rank = start + i + 1;
-
-    const memberName = await fetchMemberName(interaction.guild, userId);
-    const level = getLevelFromXP(xp);
-
-    // include XP in the name area (nice + readable)
-    const xpText = formatNum(xp); // or `XP ${formatNum(xp)}`
-    lines.push(makeLine({ rank, name: memberName, xpText, level }));
-
-
-  }
-
-  const title = category === "weekly" ? "🏆 Weekly Leaderboard" : "🏆 Leaderboard";
-
-  const embed = new EmbedBuilder()
-    .setTitle(title)
-    .setColor(0x4fe4dc)
-    .setDescription(lines.length ? lines.join("\n") : "*No data yet.*")
-    .setFooter({ text: `Page ${page + 1}/${maxPage + 1}` });
-
-  const components = buildComponents(ownerId, category, page, maxPage);
-
-  return { embed, components };
 }
 
 // ---------- command ----------
@@ -367,8 +405,11 @@ module.exports = {
         .setDescription("Which leaderboard to view")
         .addChoices(
           { name: "Total", value: "total" },
-          { name: "Weekly", value: "weekly" }
+          { name: "Weekly", value: "weekly" },
+          { name: "Gambling", value: "gamble" },
+          { name: "Largest Win", value: "gamble_best" }
         )
+
         .setRequired(false)
     )
     .addIntegerOption((opt) =>
@@ -383,18 +424,22 @@ async execute(interaction) {
   await interaction.deferReply();
 
   const ownerId = interaction.user.id;
+
+  // initial category from option (keep your old option if you want)
   const category = interaction.options.getString("category") ?? "total";
   const pageOpt = interaction.options.getInteger("page");
   const page = pageOpt ? pageOpt - 1 : 0;
 
-  // Build both categories up-front
-  const [totalPages, weeklyPages] = await Promise.all([
+  // build ALL categories up-front
+  const [totalPack, weeklyPack, gamblePack, bestPack] = await Promise.all([
     buildPagesForCategory(interaction, "total"),
     buildPagesForCategory(interaction, "weekly"),
+    buildPagesForCategory(interaction, "gamble"),
+    buildPagesForCategory(interaction, "gamble_best"),
   ]);
 
-  // pick initial
-  const chosen = category === "weekly" ? weeklyPages : totalPages;
+  const packs = { total: totalPack, weekly: weeklyPack, gamble: gamblePack, gamble_best: bestPack };
+  const chosen = packs[category] ?? packs.total;
   const safePage = clamp(page, 0, chosen.maxPage);
 
   const components = buildComponents(ownerId, category, safePage, chosen.maxPage);
@@ -404,32 +449,24 @@ async execute(interaction) {
     components,
   });
 
-  // cache per-message
   cacheSet(msg.id, {
     ownerId,
-    total: totalPages,
-    weekly: weeklyPages,
+    category,
+    page: safePage,
+    packs,
     expiresAt: Date.now() + CACHE_TTL_MS,
   });
-},
+}
+,
 
 
-async handleButton(interaction) {
-  const [prefix, ownerId, categoryRaw, pageRaw] = interaction.customId.split("|");
-  if (prefix !== "lb") return;
+async handleComponent(interaction) {
+  const msgId = interaction.message.id;
+  const cache = cacheGet(msgId);
 
-  if (interaction.user.id !== ownerId) {
-    return interaction.reply({
-      content: "This leaderboard isn't yours!",
-      flags: MessageFlags.Ephemeral,
-    });
-  }
-
-  await interaction.deferUpdate();
-
-  const cache = cacheGet(interaction.message.id);
+  // Lock controls to original invoker
   if (!cache) {
-    // cache expired (or bot restarted) — tell them to rerun
+    await interaction.deferUpdate().catch(() => {});
     return interaction.editReply({
       content: "Leaderboard expired — run `/leaderboard` again.",
       embeds: [],
@@ -437,18 +474,58 @@ async handleButton(interaction) {
     });
   }
 
-  const category = categoryRaw === "weekly" ? "weekly" : "total";
-  const page = Number(pageRaw) || 0;
+  if (interaction.user.id !== cache.ownerId) {
+    return interaction.reply({
+      content: "This leaderboard isn't yours!",
+      flags: MessageFlags.Ephemeral,
+    });
+  }
 
-  const pack = cache[category];
-  const safePage = clamp(page, 0, pack.maxPage);
+  // ACK immediately
+  await interaction.deferUpdate();
 
-  const components = buildComponents(ownerId, category, safePage, pack.maxPage);
+  // Dropdown selection
+  if (interaction.isStringSelectMenu()) {
+    const nextCategory = interaction.values?.[0] ?? cache.category;
 
-  await interaction.editReply({
-    embeds: [pack.embeds[safePage]],
-    components,
-  });
+    const pack = cache.packs[nextCategory] ?? cache.packs.total;
+    const nextPage = 0; // reset to first page when switching categories
+
+    cache.category = nextCategory;
+    cache.page = nextPage;
+    cache.expiresAt = Date.now() + CACHE_TTL_MS;
+
+    const components = buildComponents(cache.ownerId, nextCategory, nextPage, pack.maxPage);
+
+    return interaction.editReply({
+      embeds: [pack.embeds[nextPage]],
+      components,
+    });
+  }
+
+  // Prev/Next buttons
+  if (interaction.isButton()) {
+    const [prefix, ownerId, dirRaw] = interaction.customId.split("|");
+    if (prefix !== "lbnav") return;
+
+    const dir = Number(dirRaw) || 0;
+
+    const pack = cache.packs[cache.category] ?? cache.packs.total;
+    const nextPage = clamp(cache.page + dir, 0, pack.maxPage);
+
+    cache.page = nextPage;
+    cache.expiresAt = Date.now() + CACHE_TTL_MS;
+
+    const components = buildComponents(cache.ownerId, cache.category, nextPage, pack.maxPage);
+
+    return interaction.editReply({
+      embeds: [pack.embeds[nextPage]],
+      components,
+    });
+  }
 }
 
+
 };
+
+

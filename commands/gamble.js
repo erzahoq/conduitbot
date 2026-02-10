@@ -10,8 +10,8 @@ const gambleStatsPath = path.join(__dirname, "..", "data", "gamble_stats.json");
 
 
 
-// 6 hours
-const COOLDOWN_MS = 6 * 60 * 60 * 1000;
+// 8 hours
+const COOLDOWN_MS = 8 * 60 * 60 * 1000;
 
 const FLAVOUR_TIERS = [
   {
@@ -34,7 +34,15 @@ const FLAVOUR_TIERS = [
     "i've learned nothing","rock bottom speedrun any%",
     "the numbers are mocking me","skill issue", "skillet shoe",
     "the house kinda won but not really (what)",
-    "why did i believe","a fool's errand","never punished btw (punished)"
+    "why did i believe","a fool's errand","never punished btw (punished)",
+    "this was hubris",
+    "catastrophic misplay",
+    "this outcome was guaranteed actually",
+    "i have been humbled",
+    "astronomically unlucky",
+    "this hurts in ways i cant explain",
+    "never again (definitely again)",
+    "the odds personally hate me",
     ],
   },
   {
@@ -102,22 +110,35 @@ function pickFlavour(xp) {
   return { ...tier, line };
 }
 
-// ===== your XP sampler =====
-function sampleFastDecayInt(N = 50000) {
-  // Tuned so: P(X >= 10000) = 0.01 and P(X < 500) = 0.70
-  const p = 0.447020425133938;
-  const a = 0.0748934331183998;
+function makeSampler({
+  N = 50000,
+  cutoff = 10000,
+  tailAtCutoff = 0.01,   // P(X >= 10000)
+  xLow = 1000,
+  underLow = 0.80        // P(X < 1000)  <-- THIS is your main "power" knob
+} = {}) {
+  // Weibull-style survival: P(X >= x) ≈ exp(-a * x^p)
+  // Enforce: P(X >= cutoff) = tailAtCutoff, and P(X >= xLow) = 1 - underLow
+  const tailAtLow = 1 - underLow;
 
-  const u = Math.random();
+  // Solve for p, a
+  const p =
+    Math.log(Math.log(tailAtLow) / Math.log(tailAtCutoff)) /
+    Math.log(xLow / cutoff);
+
+  const a = -Math.log(tailAtCutoff) / Math.pow(cutoff, p);
+
   const denom = 1 - Math.exp(-a * Math.pow(N, p));
 
-  // Inverse CDF for the truncated Weibull-style distribution
-  const y = Math.pow(-Math.log(1 - u * denom) / a, 1 / p);
-
-  // Convert to integer support 1..N
-  const x = Math.ceil(y);
-  return Math.min(N, Math.max(1, x));
+  return function sample() {
+    const u = Math.random();
+    const y = Math.pow(-Math.log(1 - u * denom) / a, 1 / p);
+    const x = Math.ceil(y);
+    return Math.min(N, Math.max(1, x));
+  };
 }
+
+const sampleFastDecayInt = makeSampler({underLow: 0.65})
 
 module.exports = {
   data: new SlashCommandBuilder()

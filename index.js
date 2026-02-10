@@ -127,8 +127,15 @@ const GAMBLE_REMINDER_LINES = [
   "one more for the road",
   "trust",
   "fortune favours the bold!",
-  "loaded dice"
-
+  "loaded dice",
+  "it's ready when you are",
+  "the timer hit zero",
+  "heyyy bestieee :)",
+  "hihihihihi!!",
+  "missed you!",
+  "we should talk",
+  "just checking in!",
+  "this couldve been an email you know",
 ];
 
 function pick(arr) {
@@ -190,6 +197,7 @@ client.once('clientReady', () => {
                   const user = await client.users.fetch(userId).catch(() => null);
                   if (user) {
                     await user.send(pick(GAMBLE_REMINDER_LINES));
+                    console.log(`[gamblereminder] DM sent to ${userId}`);
                   }
                 } catch (e) {
                   console.warn(`[gamblereminder] DM failed for ${userId}:`, e?.message ?? e);
@@ -207,7 +215,7 @@ client.once('clientReady', () => {
           } catch (e) {
             console.error("[gamblereminder] tick error:", e);
           }
-        }, 600 * 1000);
+        }, 6 * 100 * 1000);
 
 });
 
@@ -239,19 +247,23 @@ client.on("interactionCreate", async (interaction) => {
     }
 
     // ---------- Buttons ----------
-    if (interaction.isButton()) {
-      // customId format: lb|ownerId|category|page
-      const id = interaction.customId;
+    // ---------- Components (Buttons + Dropdowns) ----------
+    if (interaction.isButton() || interaction.isStringSelectMenu()) {
+      const id = interaction.customId ?? "";
 
-      if (id.startsWith("lb|")) {
+      // route leaderboard components
+      if (id.startsWith("lbsel|") || id.startsWith("lbnav|")) {
         const leaderboardCmd = interaction.client.commands.get("leaderboard");
-        if (leaderboardCmd?.handleButton) {
-          await leaderboardCmd.handleButton(interaction);
+        if (leaderboardCmd?.handleComponent) {
+          await leaderboardCmd.handleComponent(interaction);
         }
+        return;
       }
 
+      // (keep any other button systems you have below)
       return;
     }
+
   } catch (err) {
     console.error("interactionCreate error:", err);
   }
