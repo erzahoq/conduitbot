@@ -42,7 +42,23 @@ const FLAVOUR_TIERS = [
     "astronomically unlucky",
     "this hurts in ways i cant explain",
     "never again (definitely again)",
-    "the odds personally hate me",
+    "the odds personally hate me", "this was deeply unserious",
+    "i got scammed by a random number generator",
+    "pain and also, suffering",
+    "the machine blinked and gave me lint",
+    "why did it even bother",
+    "i have made a grave error",
+    "the xp economy is in shambles",
+    "i lost the vibe check :(",
+    "this is why people fear probability",
+    "absolutely cooked",
+    "truely one of the gambles ever",
+    "we are in the bad timeline",
+    ":(",
+    "the gambler's despair",
+    "the crushing weight of inevitability",
+    "frown",
+    "it was not worth it",
     ],
   },
   {
@@ -60,7 +76,37 @@ const FLAVOUR_TIERS = [
       "that was lame",
       "better luck next time",
       "this buys like nothing","better than nothing i guess","meh","this barely counts",
-      "i see the vision", "we take those?", "it couldve been worse", "i guess", "the grind continues"
+      "i see the vision", "we take those?", "it couldve been worse", "i guess", "the grind continues",
+      "well it exists",
+      "modest little win",
+      "not terrible not amazing just kind of there",
+      "that sure is some xp",
+      "small but distinct",
+      "i mean ill take it",
+      "the machine tipped me",
+      "light snack",
+      "not enough to brag about",
+      "this is like finding a coin in the sofa",
+      "we take those i suppose",
+      "its giving minimum effort",
+      "a humble donation",
+      "tiny win, microscopic even",
+      "not bad for a silly little button",
+      "it could have insulted me harder",
+      "this moved the needle by a pixel",
+      "some xp has occurred",
+      "the bar went up a little bit yippee",
+      "respectable-ish",
+      "just enough to keep the lore going",
+      "budget win",
+      "not exactly cinematic but ok",
+      "this was serviceable",
+      "mid but in a survivable way",
+      "the machine spared me",
+      "i've had worse. many worse actually",
+      "its the thought that counts",
+      "small victory parade",
+      "financially tiny"
     ],
   },
   {
@@ -84,7 +130,35 @@ const FLAVOUR_TIERS = [
       "the number went up!",
       "acceptable","this feels intentional",
       "worth the risk (get it because theres no risk)",
-      "this is a win in my book"
+      "this is a win in my book",
+      "ok now we're talking",
+      "respectable little creature",
+      "the machine nodded approvingly",
+      "this one had some kick",
+      "we are medium back",
+      "that felt pretty good actually",
+      "oh yeah thats good",
+      "good honest xp",
+      "this has range",
+      "i can work with this",
+      "the numbers aligned for a moment!",
+      "solid roll",
+      "this one passes inspection",
+      "nice",
+      "the machine cooked a bit",
+      "thats enough to",
+      "clean respectable work",
+      "this was not embarrassing",
+      "love to see a 4 digit number",
+      "we're shopping in the real store now",
+      "this one sparkles a little",
+      "mildly blessed outcome",
+      "decent is right honestly",
+      "that had some momentum",
+      "we got movement",
+      "good soup",
+      "that landed nicely",
+      "rrr, shiny!"
     ],
   },
   {
@@ -93,7 +167,26 @@ const FLAVOUR_TIERS = [
     emoji: "🔥",
     title: "big win",
     lines: ["let's be financially responsible!", "i cant stop winning!", "no credit card debt!", "heads up penny!", "diversified investment portfolio!", "paying bills on time!",
-      "awesome!", "yippee!", "oh this is real!!", "i knew it!", "💰💰💰", "huge W!!", "i should do this more!!", "the strategy worked", "im cooking"]
+      "awesome!", "yippee!", "oh this is real!!", "i knew it!", "💰💰💰", "huge W!!", "i should do this more!!", "the strategy worked", "im cooking",
+      "OH thats real money",
+      "the machine is locked in",
+      "ok im hearing the music now",
+      "we are moving with intent",
+      "someone clip that",
+      "i knew the vision was real",
+      "massive",
+      "ok yeah this machine loves me",
+      "insane pull actually",
+      "thats a proper win",
+      "the crowd goes wild",
+      "i am looking respectfully",
+      "that was a statement",
+      "peak",
+      "this changes my life for 4 seconds",
+      "big number make brain happy",
+      "the house slipped",
+      "this was worth the button press",
+  ]
   },
   {
     min: 10000,
@@ -108,6 +201,98 @@ function pickFlavour(xp) {
   const tier = FLAVOUR_TIERS.find(t => xp >= t.min && xp <= t.max) ?? FLAVOUR_TIERS[0];
   const line = tier.lines[Math.floor(Math.random() * tier.lines.length)];
   return { ...tier, line };
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+const REVEAL_LINES = [
+  "gambling...",
+  "pulling the lever...",
+  "shaking the xp...",
+  "consulting themachine...",
+  "counting tiny little xp particles...",
+  "rolling the world's least trustworthy number...",
+  "the lever is doing something...",
+  "asking the dice to lock in...",
+  "processing questionable financial decisions...",
+  "the machine is thinking very hard",
+  "spinning that thing...",
+  "warming up the probability engine...",
+  "searching for a funny amount...",
+  "manufacturing a number...",
+  "checking behind the couch for spare xp...",
+  "the casino department is reviewing your request...",
+  "holding the button down with intent...",
+  "the machine is rummaging around...",
+  "the numbers are entering the arena...",
+  "please hold while we do something unwise...",
+  "gently disturbing the economy...",
+  "measuring out some xp...",
+  "loading gamble...",
+  "one sec the xp is still loading",
+  "the little xp particles are waking up...",
+  "the dice are rotating in their enclosure...",
+  "letting the machine cook...",
+  "doing maths probably...",
+  "asking fate for a favour...",
+  "preparing the silly number...",
+  "the machine is considering your vibes...",
+  "the lever cleared its throat",
+  "checking if this is the one...",
+  "probability is being consulted",
+  "the machine is stretching first...",
+  "digging around for a 4 digit roll...",
+  "please stand by while we locate some xp...",
+  "this could go so hard or not at all...",
+  "tapping on the glass to wake it up...",
+  "the xp goblins are discussing...",
+  "we are so about to find out",
+  "one moment while the nonsense loads...",
+  "the machine is acting suspiciously",
+  "applying advanced gambling techniques...",
+  "shuffling the integers...",
+  "the dice are whispering...",
+  "gathering the crumbs...",
+  "attempting to source a victory...",
+  "negotiating with the house...",
+  "the machine is looking at me weird",
+  "brb spinning the wheel of something",
+  "the numbers are marinating...",
+  "summoning a quantity...",
+  "coaxing the xp out of hiding...",
+  "the probability engine is purring...",
+  "please wait while we roll something probably embarrassing...",
+  "the machine is meowing softly...",
+  "poking the random number generator with a stick...",
+  "reaching into the xp bag...",
+  "the lever has been pulled with confidence",
+  "putting the machine under pressure...",
+  "consulting the stupid numbers...",
+  "trying to manifest a huge one...",
+  "the machine has clocked in",
+  "generating a financially questionable outcome...",
+  "we're doing science to it...",
+  "hold on its buffering",
+  "loading suspicious amounts of hope...",
+  "cranking the nonsense dial...",
+  "the machine is searching for something shiny...",
+  "aligning the silly little integers...",
+  "asking the universe to be funny...",
+  "the machine blinked. good sign probably"
+];
+
+function pick(arr) {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+function getTierColor(xp) {
+  if (xp >= 10000) return "#7c3aed"; // jackpot
+  if (xp >= 5000) return "#ef4444";  // big win
+  if (xp >= 1000) return "#22c55e";  // decent
+  if (xp >= 200) return "#f59e0b";   // pocket change
+  return "#6b7280";                  // terrible
 }
 
 function makeSampler({
@@ -206,9 +391,19 @@ module.exports = {
 
     await interaction.deferReply({ ephemeral: false });
 
+    const revealEmbed = new EmbedBuilder()
+      .setTitle("rolling...")
+      .setDescription(`*${pick(REVEAL_LINES)}*`);
+
+    await interaction.editReply({ embeds: [revealEmbed] });
+
+    // small suspense delay
+    await sleep(1200 + Math.floor(Math.random() * 800));
+
     if (finalGain <= 0) {
       return interaction.editReply({
-        content: "🎰 you pulled the lever... and got **0 XP**. (what?)",
+        content: "you pulled the lever... and got **0 XP**. (what?)",
+        embeds: [],
       });
     }
 
@@ -269,7 +464,7 @@ module.exports = {
 
     const embed = new EmbedBuilder()
       .setTitle(`${flavour.emoji} ${flavour.title}`)
-      .setColor("#f5b942")
+      .setColor(getTierColor(finalGain))
       .setDescription(
         [
           `you gambled and won **${finalGain.toLocaleString()} XP**.`,
