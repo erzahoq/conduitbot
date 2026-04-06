@@ -1,6 +1,6 @@
 const { SlashCommandBuilder } = require('discord.js');
 const fs = require('fs');
-const path = require('path');
+const { PATHS } = require('../config');
 const cooldowns = new Map(); // userId → last-used timestamp
 
 // ====== markov setup — learn from messages ======
@@ -325,7 +325,7 @@ function reloadMarkovFromFile(force = false) {
     let textData;
     try {
         textData = fs.readFileSync(
-            path.join(__dirname, '..', 'data', 'message_log.txt'),
+            PATHS.data.messageLog,
             'utf8'
         );
     } catch (err) {

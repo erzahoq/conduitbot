@@ -1,11 +1,11 @@
 const { SlashCommandBuilder } = require("discord.js");
-const path = require("path");
 const { readJsonSafe, writeJsonAtomic, withFileLock } = require("../helpers/jsonStore");
+const { PATHS, DEFAULTS } = require("../config");
 
-const gambleCooldownPath = path.join(__dirname, "..", "data", "gamble_cooldowns.json");
-const gambleReminderPath = path.join(__dirname, "..", "data", "gamble_reminders.json");
+const gambleCooldownPath = PATHS.data.gambleCooldowns;
+const gambleReminderPath = PATHS.data.gambleReminders;
 
-const COOLDOWN_MS = 6 * 60 * 60 * 1000;
+const COOLDOWN_MS = DEFAULTS.gambleCooldownMs;
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -36,17 +36,17 @@ module.exports = {
 
       if (mode === "on") enabled = true;
       else if (mode === "off") enabled = false;
-      else enabled = !enabled; // toggle
+      else enabled = !enabled;
 
-      // If enabling, compute nextAt from last gamble time (if any)
       let nextAt = null;
       if (enabled) {
         const cooldowns = await readJsonSafe(gambleCooldownPath, {});
-        const last = Number(cooldowns[userId] ?? 0);
-        if (last > 0) {
-          const expires = last + COOLDOWN_MS;
-          nextAt = expires > now ? expires : null; // if already ready, no need to schedule
-        }
+        const lastGambleAt = Number(cooldowns[userId] ?? 0);
+        const expirationTime = Number.isFinite(lastGambleAt)
+          ? lastGambleAt + COOLDOWN_MS
+          : 0;
+
+        nextAt = expirationTime > now ? expirationTime : null;
       }
 
       reminders[userId] = { enabled, nextAt };
@@ -71,7 +71,7 @@ module.exports = {
     }
 
     return interaction.reply({
-      content: "✅ gamble reminder DMs **enabled**.\n-# (you’re already off cooldown, so no reminder is scheduled until after your next gamble.)",
+      content: "✅ gamble reminder DMs **enabled**.\n-# (you're already off cooldown, so no reminder is scheduled until after your next gamble.)",
       ephemeral: true,
     });
   },

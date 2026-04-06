@@ -1,5 +1,6 @@
 const path = require("path");
 const fs = require("fs").promises;
+const { PATHS } = require("../config");
 
 
 function xpForLevel(L) {
@@ -106,7 +107,7 @@ function formatNum(n) {
 
 
 // --- XP ROLE CONFIG ---
-const xpRolesPath = path.join(__dirname, "..", "data", "xp_roles.json");
+const xpRolesPath = PATHS.data.xpRoles;
 
 // load XP → role mappings
 async function loadXPRoleConfig() {

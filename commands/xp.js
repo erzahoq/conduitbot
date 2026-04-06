@@ -1,16 +1,12 @@
 const { SlashCommandBuilder } = require("discord.js");
-const path = require("path");
-
 const { readJsonSafe, writeJsonAtomic, withFileLock } = require("../helpers/jsonStore");
 const { getISOWeekKey } = require("../helpers/functions");
+const { PATHS, XP_ADMIN_IDS } = require("../config");
 
 /* ---------------- CONFIG ---------------- */
 
 // Only these user IDs can use /xp commands
-const ALLOWED_USERS = [
-  "717099413138440252",
-  "535478766739259436",
-];
+const ALLOWED_USERS = XP_ADMIN_IDS;
 
 /* ---------------- XP + LEVEL FUNCTIONS ---------------- */
 
@@ -27,8 +23,8 @@ function getLevelFromXP(xp) {
 
 /* ---------------- PATHS ---------------- */
 
-const xpPath = path.join(__dirname, "..", "data", "xp.json");
-const weeklyPath = path.join(__dirname, "..", "data", "xp_weekly.json");
+const xpPath = PATHS.data.xp;
+const weeklyPath = PATHS.data.xpWeekly;
 
 /* ---------------- HELPERS ---------------- */
 

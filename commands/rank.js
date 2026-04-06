@@ -6,7 +6,9 @@ const {
   EmbedBuilder
 } = require("discord.js");
 const fs = require("fs").promises;
+const fsSync = require("fs");
 const path = require("path");
+const { PATHS } = require("../config");
 const { GlobalFonts, createCanvas, loadImage } = require("@napi-rs/canvas");
 const { getEffectiveMultiplier, formatMultiplier, loadMultipliers } = require("../helpers/xpmult");
 
@@ -23,18 +25,27 @@ const {
 //get colours
 let LEVEL_COLOURS = [];
 
-async function loadLevelColours() {
-  const filePath = path.join(__dirname, "..", "data", "level_colours.txt");
-  const raw = await fs.readFile(filePath, "utf8");
+function loadLevelColours() {
+  const filePath = PATHS.config.levelColours;
+  try {
+    const raw = fsSync.readFileSync(filePath, "utf8");
 
-  LEVEL_COLOURS = raw
-    .split(/\r?\n/)
-    .map(line => line.trim())
-    .filter(line => /^#?[0-9A-Fa-f]{6}$/.test(line)) // keep only hex values
-    .map(line => line.startsWith("#") ? line : "#" + line); // ensure # prefix
+    LEVEL_COLOURS = raw
+      .split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(line => /^#?[0-9A-Fa-f]{6}$/.test(line)) // keep only hex values
+      .map(line => line.startsWith("#") ? line : "#" + line); // ensure # prefix
+
+    if (LEVEL_COLOURS.length === 0) {
+      throw new Error("No valid colour values found in level_colours.txt");
+    }
+  } catch (err) {
+    console.error("Failed to load level colours:", err.message || err);
+    LEVEL_COLOURS = ["#4fe4dc"];
+  }
 }
 
-// Immediately load at startup
+// Load once at startup
 loadLevelColours();
 
 
@@ -455,8 +466,7 @@ module.exports = {
    async execute(interaction) {
     const targetUser = interaction.options.getUser("member") || interaction.user;
 
-    const xpPath = path.join(__dirname, "..", "data", "xp.json");
-    const raw = await fs.readFile(xpPath, "utf8");
+    const raw = await fs.readFile(PATHS.data.xp, "utf8");
     const xpData = JSON.parse(raw);
 
     const xp = Math.floor(xpData[targetUser.id]?.xp ?? 0);

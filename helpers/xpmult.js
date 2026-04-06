@@ -1,7 +1,11 @@
 const fs = require("fs").promises;
-const path = require("path");
+const { watchFile } = require("fs");
+const { PATHS } = require("../config");
 
-const multPath = path.join(__dirname, "..", "data", "xp_multipliers.json");
+const multPath = PATHS.data.xpMultipliers;
+let multiplierCache = null;
+let loadingMultipliers = null;
+let multiplierWatcherInitialized = false;
 
 // Default structure if file doesn't exist / is empty
 const DEFAULT_MULTS = {
@@ -12,33 +16,62 @@ const DEFAULT_MULTS = {
   users: {},
 };
 
-async function loadMultipliers() {
-  try {
-    const raw = await fs.readFile(multPath, "utf8");
-    if (!raw.trim()) return { ...DEFAULT_MULTS };
-    const parsed = JSON.parse(raw);
+function startMultiplierWatcher() {
+  if (multiplierWatcherInitialized) return;
+  multiplierWatcherInitialized = true;
 
-    // merge with defaults in case some keys are missing
-    return {
-      ...DEFAULT_MULTS,
-      ...parsed,
-      roles: parsed.roles || {},
-      channels: parsed.channels || {},
-      users: parsed.users || {},
-    };
+  try {
+    watchFile(multPath, { interval: 2000 }, (curr, prev) => {
+      if (curr.mtimeMs !== prev.mtimeMs) {
+        multiplierCache = null;
+      }
+    });
   } catch (err) {
-    if (err.code === "ENOENT") {
-      // file doesn't exist yet → create it
-      await fs.writeFile(
-        multPath,
-        JSON.stringify(DEFAULT_MULTS, null, 2),
-        "utf8"
-      );
-      return { ...DEFAULT_MULTS };
-    }
-    console.error("Error loading xp_multipliers.json:", err);
-    throw err;
+    console.error("Unable to watch xp_multipliers.json:", err);
   }
+}
+
+function cacheMultipliers(mults) {
+  multiplierCache = mults;
+  return multiplierCache;
+}
+
+async function loadMultipliers() {
+  if (multiplierCache) return multiplierCache;
+  if (loadingMultipliers) return loadingMultipliers;
+
+  startMultiplierWatcher();
+
+  loadingMultipliers = (async () => {
+    try {
+      const raw = await fs.readFile(multPath, "utf8");
+      if (!raw.trim()) return cacheMultipliers({ ...DEFAULT_MULTS });
+      const parsed = JSON.parse(raw);
+
+      return cacheMultipliers({
+        ...DEFAULT_MULTS,
+        ...parsed,
+        roles: parsed.roles || {},
+        channels: parsed.channels || {},
+        users: parsed.users || {},
+      });
+    } catch (err) {
+      if (err.code === "ENOENT") {
+        await fs.writeFile(
+          multPath,
+          JSON.stringify(DEFAULT_MULTS, null, 2),
+          "utf8"
+        );
+        return cacheMultipliers({ ...DEFAULT_MULTS });
+      }
+      console.error("Error loading xp_multipliers.json:", err);
+      throw err;
+    } finally {
+      loadingMultipliers = null;
+    }
+  })();
+
+  return loadingMultipliers;
 }
 
 async function saveMultipliers(mults) {
@@ -51,6 +84,7 @@ async function saveMultipliers(mults) {
   };
 
   await fs.writeFile(multPath, JSON.stringify(toSave, null, 2), "utf8");
+  cacheMultipliers(toSave);
 }
 
 /**

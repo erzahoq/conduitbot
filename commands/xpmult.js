@@ -1,13 +1,11 @@
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 const { loadMultipliers, saveMultipliers } = require("../helpers/xpmult");
+const { XP_ADMIN_IDS } = require("../config");
 
 /* ---------------- CONFIG ---------------- */
 
 // Only these user IDs can use /xpmult commands
-const ALLOWED_USERS = [
-  "717099413138440252",
-  "535478766739259436",
-];
+const ALLOWED_USERS = XP_ADMIN_IDS;
 
 /* ---------------- SLASH COMMAND ---------------- */
 

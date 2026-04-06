@@ -1,7 +1,7 @@
 // Import necessary modules
 const { Client, GatewayIntentBits, Partials } = require('discord.js');
 const fs = require('fs');
-const path = require('path');
+const { PATHS } = require('../config');
 require("dotenv").config();
 
 const { cleanExtraNewlines, applyReplacements, shouldBlockMessage } = require('./sanitize');
@@ -9,14 +9,14 @@ const { cleanExtraNewlines, applyReplacements, shouldBlockMessage } = require('.
 const BOT_ID = "1439791725576192110";
 
 // Clear the log file before starting fresh
-fs.writeFileSync(path.join(__dirname, '..','data', 'message_log.txt'), '');
+fs.writeFileSync(PATHS.data.messageLog, '');
 console.log('Cleared message_log.txt');
 
 
 
 // Load replacement patterns from JSON
 const replacementsRaw = JSON.parse(
-    fs.readFileSync(path.join(__dirname, '..', 'data', 'replacements.json'), 'utf8')
+    fs.readFileSync(PATHS.config.replacements, 'utf8')
 );
 
 // Compile them into RegExp objects (with global + case-insensitive flags, tweak as you like)
@@ -96,7 +96,7 @@ async function fetchAllMessages(channel) {
         .join('\n');
 
     messageLog = cleanExtraNewlines(messageLog);
-    fs.appendFileSync(path.join(__dirname, '..', 'data', 'message_log.txt'), messageLog + '\n');
+    fs.appendFileSync(PATHS.data.messageLog, messageLog + '\n');
 
 
 

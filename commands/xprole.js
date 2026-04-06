@@ -4,15 +4,12 @@ const {
 } = require("discord.js");
 
 const fs = require("fs").promises;
-const path = require("path");
+const { PATHS, BOT_OWNER_IDS } = require("../config");
 
-const ALLOWED_USERS = [
-  "717099413138440252", // you
-  "535478766739259436", // bot owner(s)
-];
+const ALLOWED_USERS = BOT_OWNER_IDS;
 
 // xp role config file
-const xpRolesPath = path.join(__dirname, "..", "data", "xp_roles.json");
+const xpRolesPath = PATHS.data.xpRoles;
 
 async function loadXPRoleConfig() {
   try {

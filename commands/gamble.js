@@ -1,17 +1,17 @@
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
-const path = require("path");
-
 const { readJsonSafe, writeJsonAtomic, withFileLock } = require("../helpers/jsonStore");
 const { loadMultipliers, getEffectiveMultiplier } = require("../helpers/xpmult");
 const { getLevelFromXP, handleLevelUpRoles } = require("../helpers/functions");
-const gambleCooldownPath = path.join(__dirname, "..", "data", "gamble_cooldowns.json");
-const gambleReminderPath = path.join(__dirname, "..", "data", "gamble_reminders.json");
-const gambleStatsPath = path.join(__dirname, "..", "data", "gamble_stats.json");
+const { PATHS, DEFAULTS } = require("../config");
+
+const gambleCooldownPath = PATHS.data.gambleCooldowns;
+const gambleReminderPath = PATHS.data.gambleReminders;
+const gambleStatsPath = PATHS.data.gambleStats;
 
 
 
 // 8 hours
-const COOLDOWN_MS = 8 * 60 * 60 * 1000;
+const COOLDOWN_MS = DEFAULTS.gambleCooldownMs;
 
 const FLAVOUR_TIERS = [
   {
@@ -352,7 +352,10 @@ module.exports = {
         const reminders = await readJsonSafe(gambleReminderPath, {});
         const entry = reminders[userId];
         if (entry?.enabled) {
-          reminders[userId].nextAt = now + COOLDOWN_MS;
+          reminders[userId] = {
+            enabled: true,
+            nextAt: now + COOLDOWN_MS,
+          };
           await writeJsonAtomic(gambleReminderPath, reminders);
         }
       });
@@ -372,7 +375,7 @@ module.exports = {
     }
 
     // ---- paths ----
-    const xpDataPath = path.join(__dirname, "..", "data", "xp.json");
+    const xpDataPath = PATHS.data.xp;
 
     // ---- roll XP ----
     const baseWin = sampleFastDecayInt(50000);

@@ -10,8 +10,8 @@ const {
 
 
 const fs = require("fs").promises;
-const path = require("path");
 
+const { PATHS } = require("../config");
 const { formatNum, getLevelFromXP } = require("../helpers/functions");
 
 const PAGE_SIZE = 10;
@@ -232,8 +232,7 @@ function makeLine({ rank, name, midText, rightText }) {
 
 async function loadEntries(category) {
   if (category === "weekly") {
-    const weeklyPath = path.join(__dirname, "..", "data", "xp_weekly.json");
-    const raw = await fs.readFile(weeklyPath, "utf8");
+    const raw = await fs.readFile(PATHS.data.xpWeekly, "utf8");
     const weeklyData = JSON.parse(raw);
     const xpData = weeklyData.users || {};
     return Object.entries(xpData).map(([id, obj]) => ({
@@ -243,8 +242,7 @@ async function loadEntries(category) {
   }
 
   if (category === "gamble") {
-    const statsPath = path.join(__dirname, "..", "data", "gamble_stats.json");
-    const raw = await fs.readFile(statsPath, "utf8");
+    const raw = await fs.readFile(PATHS.data.gambleStats, "utf8");
     const stats = JSON.parse(raw);
 
     // leaderboard by most gambles (count)
@@ -255,8 +253,7 @@ async function loadEntries(category) {
   }
 
     if (category === "gamble_best") {
-      const statsPath = path.join(__dirname, "..", "data", "gamble_stats.json");
-      const raw = await fs.readFile(statsPath, "utf8");
+      const raw = await fs.readFile(PATHS.data.gambleStats, "utf8");
       const stats = JSON.parse(raw);
 
       // leaderboard by largest single win (best)
@@ -268,8 +265,7 @@ async function loadEntries(category) {
 
 
   // total
-  const xpPath = path.join(__dirname, "..", "data", "xp.json");
-  const raw = await fs.readFile(xpPath, "utf8");
+  const raw = await fs.readFile(PATHS.data.xp, "utf8");
   const xpData = JSON.parse(raw);
 
   return Object.entries(xpData).map(([id, obj]) => ({

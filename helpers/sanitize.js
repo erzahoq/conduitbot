@@ -1,6 +1,7 @@
 // sanitize.js
 const fs = require('fs');
 const path = require('path');
+const { PATHS } = require('../config');
 
 // === cleanExtraNewlines (same as logger.js) ===
 function cleanExtraNewlines(text) {
@@ -17,7 +18,7 @@ function cleanExtraNewlines(text) {
 
 // === replacements (shared) ===
 const replacementsRaw = JSON.parse(
-    fs.readFileSync(path.join(__dirname, '../data', 'replacements.json'), 'utf8')
+    fs.readFileSync(PATHS.config.replacements, 'utf8')
 );
 
 const replacementPatterns = Object.entries(replacementsRaw).map(([pattern, replacement]) => ({
@@ -63,7 +64,7 @@ let blockedConfig = {
 
 try {
     const blockedRaw = JSON.parse(
-        fs.readFileSync(path.join(__dirname, '../data', 'blocked.json'), 'utf8')
+        fs.readFileSync(PATHS.config.blocked, 'utf8')
     );
 
     blockedConfig = {

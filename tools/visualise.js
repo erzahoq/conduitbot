@@ -2,6 +2,7 @@
 // Run with: node tools/export_markov_graph.js "optional prompt"
 const fs = require('fs');
 const path = require('path');
+const { PATHS } = require('../config');
 
 // Load/build your chain however you want.
 // Easiest: copy/paste or require the builder functions from your bot file.
@@ -144,7 +145,7 @@ function buildSubgraph(markovChain, seedKeys, opts) {
 const prompt = process.argv.slice(2).join(' ').trim() || null;
 
 const textData = fs.readFileSync(
-  path.join(__dirname, '..', 'data', 'message_log.txt'),
+  PATHS.data.messageLog,
   'utf8'
 );
 

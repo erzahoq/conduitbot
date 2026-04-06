@@ -8,16 +8,14 @@ const {
     MessageFlags
 } = require('discord.js');
 const fs = require('fs');
-const path = require('path');
 require('dotenv').config();
 
 const { readJsonSafe, writeJsonAtomic, withFileLock } = require("./helpers/jsonStore");
 
 const { sanitizeMessage } = require('./helpers/sanitize');
 const { loadMultipliers, getEffectiveMultiplier } = require("./helpers/xpmult");
-const { handleLevelUpRoles } = require('./helpers/functions');
-const { getLevelFromXP } = require('./helpers/functions');
-const { getISOWeekKey } = require('./helpers/functions'); // at top
+const { handleLevelUpRoles, getLevelFromXP, getISOWeekKey } = require('./helpers/functions');
+const { PATHS, DEFAULTS } = require('./config');
 
 const client = new Client({
     intents: [
@@ -46,7 +44,9 @@ client.on('shardReconnecting', shardId => {
 });
 
 // ===== gamble reminder tick setup =====
-const gambleReminderPath = path.join(__dirname, "data", "gamble_reminders.json");
+const gambleReminderPath = PATHS.data.gambleReminders;
+const gambleCooldownPath = PATHS.data.gambleCooldowns;
+const COOLDOWN_MS = DEFAULTS.gambleCooldownMs;
 
 const GAMBLE_REMINDER_LINES = [
   "psst… the lever is calling your name...",
@@ -218,17 +218,30 @@ client.once('clientReady', () => {
 
             await withFileLock(gambleReminderPath, async () => {
               const data = await readJsonSafe(gambleReminderPath, {});
+              const cooldownData = await readJsonSafe(gambleCooldownPath, {});
               let changed = false;
 
               for (const [userId, entry] of Object.entries(data)) {
                 if (!entry?.enabled) continue;
-                if (!entry?.nextAt) continue;
 
-                const nextAt = Number(entry.nextAt);
+                let nextAt = Number(entry.nextAt ?? NaN);
                 if (!Number.isFinite(nextAt)) {
-                  data[userId].nextAt = null;
-                  changed = true;
-                  continue;
+                  const lastGamble = Number(cooldownData[userId] ?? NaN);
+                  const expirationTime = Number.isFinite(lastGamble)
+                    ? lastGamble + COOLDOWN_MS
+                    : NaN;
+
+                  if (Number.isFinite(expirationTime) && expirationTime > now) {
+                    nextAt = expirationTime;
+                    data[userId].nextAt = expirationTime;
+                    changed = true;
+                  } else {
+                    if (entry.nextAt !== null) {
+                      data[userId].nextAt = null;
+                      changed = true;
+                    }
+                    continue;
+                  }
                 }
 
                 if (now < nextAt) continue;
@@ -256,7 +269,7 @@ client.once('clientReady', () => {
           } catch (e) {
             console.error("[gamblereminder] tick error:", e);
           }
-        }, 6 * 100 * 1000);
+        }, 60 * 1000);
 
 });
 
@@ -311,7 +324,7 @@ client.on("interactionCreate", async (interaction) => {
 });
 
 
-const logPath = path.join(__dirname, 'data', 'message_log.txt');
+const logPath = PATHS.data.messageLog;
 
 // xp + message logging
 client.on("messageCreate", async (message) => {
@@ -328,9 +341,9 @@ client.on("messageCreate", async (message) => {
     });
 
     // paths
-    const xpDataPath = path.join(__dirname, "data", "xp.json");
-    const weeklyPath = path.join(__dirname, "data", "xp_weekly.json");
-    const weeklyConfigPath = path.join(__dirname, "data", "weekly_config.json");
+    const xpDataPath = PATHS.data.xp;
+    const weeklyPath = PATHS.data.xpWeekly;
+    const weeklyConfigPath = PATHS.config.weekly;
 
     const userId = message.author.id;
     const now = Date.now();
