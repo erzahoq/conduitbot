@@ -17,14 +17,27 @@ function cleanExtraNewlines(text) {
 }
 
 // === replacements (shared) ===
-const replacementsRaw = JSON.parse(
-    fs.readFileSync(PATHS.config.replacements, 'utf8')
-);
+let replacementsRaw = {};
+let replacementPatterns = [];
 
-const replacementPatterns = Object.entries(replacementsRaw).map(([pattern, replacement]) => ({
-    regex: new RegExp(pattern, 'gi'),
-    replacement,
-}));
+function loadReplacements() {
+    try {
+        replacementsRaw = JSON.parse(
+            fs.readFileSync(PATHS.config.replacements, 'utf8')
+        );
+        replacementPatterns = Object.entries(replacementsRaw).map(([pattern, replacement]) => ({
+            regex: new RegExp(pattern, 'gi'),
+            replacement,
+        }));
+    } catch (err) {
+        console.error('Failed to load replacements config:', err.message);
+        replacementsRaw = {};
+        replacementPatterns = [];
+    }
+}
+
+// Load once at startup
+loadReplacements();
 
 function applyReplacements(text) {
     if (!text) return '';
@@ -62,40 +75,65 @@ let blockedConfig = {
     }
 };
 
-try {
-    const blockedRaw = JSON.parse(
-        fs.readFileSync(PATHS.config.blocked, 'utf8')
-    );
+let JSON_BLOCK_PATTERNS = [];
+let JSON_BLOCK_PHRASES = [];
 
-    blockedConfig = {
-        enabled: blockedRaw?.enabled ?? true,
-        mode: blockedRaw?.mode ?? "drop",
-        regex: Array.isArray(blockedRaw?.regex) ? blockedRaw.regex : [],
-        phrases: Array.isArray(blockedRaw?.phrases) ? blockedRaw.phrases : [],
-        options: {
-            check_normalized: blockedRaw?.options?.check_normalized ?? true,
-            detect_spam: blockedRaw?.options?.detect_spam ?? true,
-        }
-    };
-} catch (e) {
-    // If blocked.json is missing/invalid, fall back to defaults (still safe)
+function loadBlockedConfig() {
+    try {
+        const blockedRaw = JSON.parse(
+            fs.readFileSync(PATHS.config.blocked, 'utf8')
+        );
+
+        blockedConfig = {
+            enabled: blockedRaw?.enabled ?? true,
+            mode: blockedRaw?.mode ?? "drop",
+            regex: Array.isArray(blockedRaw?.regex) ? blockedRaw.regex : [],
+            phrases: Array.isArray(blockedRaw?.phrases) ? blockedRaw.phrases : [],
+            options: {
+                check_normalized: blockedRaw?.options?.check_normalized ?? true,
+                detect_spam: blockedRaw?.options?.detect_spam ?? true,
+            }
+        };
+
+        // Compile JSON regex patterns
+        JSON_BLOCK_PATTERNS = blockedConfig.regex
+            .filter(s => typeof s === "string" && s.length > 0)
+            .map(s => {
+                try {
+                    return new RegExp(s, "i");
+                } catch (err) {
+                    console.error(`Invalid regex pattern "${s}":`, err.message);
+                    return null;
+                }
+            })
+            .filter(re => re !== null);
+
+        // Lowercase phrase list
+        JSON_BLOCK_PHRASES = blockedConfig.phrases
+            .filter(s => typeof s === "string" && s.trim().length > 0)
+            .map(s => s.trim().toLowerCase());
+
+    } catch (err) {
+        console.error('Failed to load blocked config:', err.message);
+        // Keep defaults
+    }
 }
 
-// Compile JSON regex patterns
-const JSON_BLOCK_PATTERNS = blockedConfig.regex
-    .filter(s => typeof s === "string" && s.length > 0)
-    .map(s => new RegExp(s, "i"));
+// Load once at startup
+loadBlockedConfig();
 
-// Lowercase phrase list
-const JSON_BLOCK_PHRASES = blockedConfig.phrases
-    .filter(s => typeof s === "string" && s.trim().length > 0)
-    .map(s => s.trim().toLowerCase());
+// Function to reload config (useful for runtime updates)
+function reloadBlockedConfig() {
+    loadBlockedConfig();
+    loadReplacements();
+}
 
 // Normalize text to catch simple obfuscation:
 // - lowercases
 // - strips diacritics
 // - removes most punctuation/spaces
 // - collapses repeats
+// - handles common leet speak
 function normalizeForFilter(input) {
     if (!input) return "";
 
@@ -103,6 +141,15 @@ function normalizeForFilter(input) {
 
     // Remove diacritics (é -> e)
     t = t.normalize("NFKD").replace(/[\u0300-\u036f]/g, "");
+
+    // Common leet speak substitutions
+    const leetMap = {
+        '4': 'a', '@': 'a', '3': 'e', '1': 'i', '!': 'i',
+        '0': 'o', '5': 's', '$': 's', '7': 't', '+': 't',
+        '9': 'g', '6': 'g', '8': 'b', '2': 'z'
+    };
+
+    t = t.split('').map(char => leetMap[char] || char).join('');
 
     // Replace common separators with nothing (so "n s f w" still matches)
     t = t.replace(/[\s\.\-_\*\~`'"“”‘’()\[\]{}<>|\\/]+/g, "");
@@ -143,6 +190,22 @@ function looksLikeSpam(message) {
 
     // very long repeated chars (e.g. "!!!!!!!!!!!!!" / "aaaaaa...")
     if (/(.)\1{12,}/.test(text)) return true;
+
+    // excessive caps (more than 80% of alphabetic chars)
+    const alphaChars = text.replace(/[^a-z]/gi, '');
+    const capsChars = text.replace(/[^A-Z]/g, '');
+    if (alphaChars.length > 10 && (capsChars.length / alphaChars.length) > 0.8) return true;
+
+    // repeated words or phrases
+    const words = text.toLowerCase().split(/\s+/);
+    const wordCounts = {};
+    for (const word of words) {
+        if (word.length > 3) { // ignore short words
+            wordCounts[word] = (wordCounts[word] || 0) + 1;
+        }
+    }
+    const maxRepeats = Math.max(...Object.values(wordCounts));
+    if (maxRepeats >= 5) return true;
 
     return false;
 }
@@ -206,5 +269,6 @@ module.exports = {
     cleanExtraNewlines,
     applyReplacements,
     sanitizeMessage,
-    shouldBlockMessage
+    shouldBlockMessage,
+    reloadBlockedConfig
 };

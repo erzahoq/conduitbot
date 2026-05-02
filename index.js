@@ -404,10 +404,18 @@ client.on("messageCreate", async (message) => {
               const ch = await client.channels.fetch(cfg.channelId).catch(() => null);
               if (ch) {
                 const medals = ["🥇", "🥈", "🥉"];
-                const lines = top10.map(([id, xp], i) => {
+                const lines = await Promise.all(top10.map(async ([id, xp], i) => {
                   const prefix = medals[i] ?? `**#${i + 1}**`;
-                  return `${prefix} <@${id}> — **${xp} XP**`;
-                });
+                  
+                  // Ping top 3, list names for rest
+                  if (i < 3) {
+                    return `${prefix} <@${id}> — **${xp} XP**`;
+                  } else {
+                    const user = await client.users.fetch(id).catch(() => null);
+                    const username = user?.username ?? `Unknown User (${id})`;
+                    return `${prefix} ${username} — **${xp} XP**`;
+                  }
+                }));
 
                 const recordLine = weekly.record?.userId
                   ? `\n🏆 **All-time best week:** <@${weekly.record.userId}> — **${weekly.record.xp} XP**`
