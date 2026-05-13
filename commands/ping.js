@@ -563,30 +563,6 @@ module.exports = {
             
         ];
 
-        // 1 in 10 chance for a stat-related ping message
-        if (Math.random()*10 <= 1) {
-            const response = await fetch('https://ch.tetr.io/api/general/stats');
-            const stats = await response.json(); // Use .json() to parse the response as JSON
-    
-            if (!stats.success) {
-                return await interaction.reply({
-                    content: `tetr.io api is down lol\nBot API Latency: ${ping}`
-                });
-            }
-    
-            const server = stats.data;
-
-            pingMsgs = [
-                `there are ${server.usercount} players registered!`,
-                `there have been ${server.gamesplayed} total games played. only ${server.gamesfinished} were finished, though...`,
-                `${server.piecesplaced} pieces have been placed! i wonder how many were misdrops.`,
-                `there are ${server.rankedcount} ranked players! tetra league for the win.`, // github copilot suggested "i wonder how many are top 100" hmm i wonder
-                `there are ${server.anoncount} anonymous players! do you think they have something to hide?`,
-                `there have been ${server.recordcount} saved game records!`,
-                `tetr.io has been played for a total of ${server.gametime} seconds!`,
-            ]
-        }
-
         if (ping == "infinite ms") {
             pingMsgs = [
                 "ping so high it's looped back to negative",

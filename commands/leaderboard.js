@@ -193,7 +193,8 @@ function buildComponents(ownerId, category, page, maxPage) {
       { label: "Total XP", value: "total", emoji: "🏆", default: category === "total" },
       { label: "Weekly XP", value: "weekly", emoji: "📅", default: category === "weekly" },
       { label: "Most Gambles", value: "gamble", emoji: "🎰", default: category === "gamble" },
-      { label: "Largest Win From Gamble", value: "gamble_best", emoji: "💎", default: category === "gamble_best" }
+      { label: "Largest Win From Gamble", value: "gamble_best", emoji: "💎", default: category === "gamble_best" },
+      { label: "Bump Count", value: "bump", emoji: "🚀", default: category === "bump" }
     );
 
   const row1 = new ActionRowBuilder().addComponents(select);
@@ -260,6 +261,17 @@ async function loadEntries(category) {
       return Object.entries(stats).map(([id, obj]) => ({
         id,
         value: Math.floor(obj?.best ?? 0),
+      }));
+    }
+
+    if (category === "bump") {
+      const raw = await fs.readFile(PATHS.data.bumps, "utf8");
+      const bumpsData = JSON.parse(raw);
+
+      // leaderboard by total bumps
+      return Object.entries(bumpsData).filter(([id]) => id !== 'lastGlobalBump').map(([id, obj]) => ({
+        id,
+        value: Math.floor(obj?.totalBumps ?? 0),
       }));
     }
 
@@ -333,9 +345,9 @@ async function buildPagesForCategory(interaction, category) {
 
       const name = resolveName(userId, `<@${userId}>`);
 
-        if (category === "gamble" || category === "gamble_best") {
-          const rightText = category === "gamble" ? "gambles" : "best";
-          const midText = category === "gamble"
+        if (category === "gamble" || category === "gamble_best" || category === "bump") {
+          const rightText = category === "gamble" ? "gambles" : category === "gamble_best" ? "best" : "bumps";
+          const midText = category === "gamble" || category === "bump"
             ? String(value)
             : formatNum(value);
 
@@ -364,17 +376,21 @@ async function buildPagesForCategory(interaction, category) {
 
         const title =
       category === "weekly"
-        ? "🏆 Weekly Leaderboard"
+        ? "Weekly Leaderboard"
         : category === "gamble"
-        ? "🎰 Gambling Leaderboard"
+        ? "Gambling Leaderboard"
         : category === "gamble_best"
-        ? "💎 Largest Win Leaderboard"
-        : "🏆 Leaderboard";
+        ? "Largest Win Leaderboard"
+        : category === "bump"
+        ? "Bump Leaderboard"
+        : "Leaderboard";
 
 
         const emptyMsg =
       category === "gamble" || category === "gamble_best"
         ? "*No gamble stats yet.*"
+        : category === "bump"
+        ? "*No bump data yet.*"
         : "*No data yet.*";
 
 
@@ -394,7 +410,7 @@ async function buildPagesForCategory(interaction, category) {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("leaderboard")
-    .setDescription("Shows the XP leaderboard (Total/Weekly) with pages.")
+    .setDescription("Shows many different leaderboards!")
     .addStringOption((opt) =>
       opt
         .setName("category")
@@ -403,7 +419,8 @@ module.exports = {
           { name: "Total", value: "total" },
           { name: "Weekly", value: "weekly" },
           { name: "Gambling", value: "gamble" },
-          { name: "Largest Win", value: "gamble_best" }
+          { name: "Largest Win", value: "gamble_best" },
+          { name: "Bump", value: "bump" }
         )
 
         .setRequired(false)
@@ -427,14 +444,15 @@ async execute(interaction) {
   const page = pageOpt ? pageOpt - 1 : 0;
 
   // build ALL categories up-front
-  const [totalPack, weeklyPack, gamblePack, bestPack] = await Promise.all([
+  const [totalPack, weeklyPack, gamblePack, bestPack, bumpPack] = await Promise.all([
     buildPagesForCategory(interaction, "total"),
     buildPagesForCategory(interaction, "weekly"),
     buildPagesForCategory(interaction, "gamble"),
     buildPagesForCategory(interaction, "gamble_best"),
+    buildPagesForCategory(interaction, "bump"),
   ]);
 
-  const packs = { total: totalPack, weekly: weeklyPack, gamble: gamblePack, gamble_best: bestPack };
+  const packs = { total: totalPack, weekly: weeklyPack, gamble: gamblePack, gamble_best: bestPack, bump: bumpPack };
   const chosen = packs[category] ?? packs.total;
   const safePage = clamp(page, 0, chosen.maxPage);
 

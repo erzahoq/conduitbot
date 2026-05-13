@@ -378,7 +378,13 @@ module.exports = {
     const xpDataPath = PATHS.data.xp;
 
     // ---- roll XP ----
-    const baseWin = sampleFastDecayInt(50000);
+    let baseWin = sampleFastDecayInt(50000);
+
+    // 1/10 chance for critical fail: if roll is 1, it becomes -1
+    if (baseWin === 1 && Math.random() < 0.1) {
+      baseWin = -1;
+    }
+
     const targetUser = interaction.user;
 
     const APPLY_MULTS = false;
@@ -405,7 +411,7 @@ module.exports = {
 
     if (finalGain <= 0) {
       return interaction.editReply({
-        content: "you pulled the lever... and got **0 XP**. (what?)",
+        content: `you pulled the lever... and got **${finalGain} XP**. (what?)`,
         embeds: [],
       });
     }

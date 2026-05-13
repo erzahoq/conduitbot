@@ -28,6 +28,7 @@ const PATHS = {
     gambleCooldowns: path.join(DATA_DIR, 'gamble_cooldowns.json'),
     gambleReminders: path.join(DATA_DIR, 'gamble_reminders.json'),
     gambleStats: path.join(DATA_DIR, 'gamble_stats.json'),
+    bumps: path.join(DATA_DIR, 'bumps.json'),
     messageLog: path.join(DATA_DIR, 'message_log.txt'),
   },
   config: {
