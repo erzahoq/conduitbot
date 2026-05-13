@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const { readJsonSafe, writeJsonAtomic } = require('../helpers/jsonStore');
-const { PATHS } = require('../config');
+const { readJsonSafe, writeJsonAtomic } = require('../../helpers/jsonStore');
+const { PATHS } = require('../../config');
 
 const bumpsPath = PATHS.data.bumps;
 const COOLDOWN_MS = 2 * 60 * 60 * 1000; // 2 hours
@@ -37,11 +37,16 @@ module.exports = {
 		// Write back to file
 		await writeJsonAtomic(bumpsPath, bumpsData);
 
+        let nameOfTitle = "bumped";
+        let nameOfEmbed = 'bumps'
+
+        if (Math.random() < 0.02) {nameOfTitle = 'gupped'; nameOfEmbed = 'gups';}
+
 		// Respond to the user
 		const randomColor = Math.floor(Math.random() * 0xFFFFFF);
 		const embed = new EmbedBuilder()
-			.setTitle('Server Bumped!')
-			.setDescription(`You now have ${bumpsData[userId].totalBumps} total bumps!`)
+			.setTitle(`Server ${nameOfTitle}!`)
+			.setDescription(`You now have ${bumpsData[userId].totalBumps} total ${nameOfEmbed}!`)
 			.setColor(randomColor)
 		await interaction.reply({ embeds: [embed], ephemeral: false });
 	},

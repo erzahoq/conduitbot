@@ -1,16 +1,35 @@
 const { REST, Routes } = require('discord.js');
 const fs = require('fs');
+const path = require('path');
 require('dotenv').config();
 
 const commands = [];
-const commandFiles = fs.readdirSync('./commands').filter(file => file.endsWith('.js'));
+const commandsPath = path.join(__dirname, 'commands');
 
-for (const file of commandFiles) {
-    const command = require(`./commands/${file}`);
+function getCommandFiles(dir) {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    const files = [];
+
+    for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+            files.push(...getCommandFiles(fullPath));
+        } else if (entry.isFile() && fullPath.endsWith('.js')) {
+            files.push(fullPath);
+        }
+    }
+
+    return files;
+}
+
+const commandFiles = getCommandFiles(commandsPath);
+
+for (const filePath of commandFiles) {
+    const command = require(filePath);
     if ('data' in command && 'execute' in command) {
         commands.push(command.data.toJSON());
     } else {
-        console.log(`[WARNING] The command at ./commands/${file} is missing "data" or "execute".`);
+        console.log(`[WARNING] The command at ${path.relative(__dirname, filePath)} is missing "data" or "execute".`);
     }
 }
 

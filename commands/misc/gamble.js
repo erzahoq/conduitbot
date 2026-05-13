@@ -1,8 +1,8 @@
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
-const { readJsonSafe, writeJsonAtomic, withFileLock } = require("../helpers/jsonStore");
-const { loadMultipliers, getEffectiveMultiplier } = require("../helpers/xpmult");
-const { getLevelFromXP, handleLevelUpRoles } = require("../helpers/functions");
-const { PATHS, DEFAULTS } = require("../config");
+const { readJsonSafe, writeJsonAtomic, withFileLock } = require("../../helpers/jsonStore");
+const { loadMultipliers, getEffectiveMultiplier } = require("../../helpers/xpmult");
+const { getLevelFromXP, handleLevelUpRoles } = require("../../helpers/functions");
+const { PATHS, DEFAULTS } = require("../../config");
 
 const gambleCooldownPath = PATHS.data.gambleCooldowns;
 const gambleReminderPath = PATHS.data.gambleReminders;

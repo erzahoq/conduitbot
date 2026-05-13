@@ -8,9 +8,9 @@ const {
 const fs = require("fs").promises;
 const fsSync = require("fs");
 const path = require("path");
-const { PATHS } = require("../config");
 const { GlobalFonts, createCanvas, loadImage } = require("@napi-rs/canvas");
-const { getEffectiveMultiplier, formatMultiplier, loadMultipliers } = require("../helpers/xpmult");
+const { PATHS } = require("../../config");
+const { getEffectiveMultiplier, formatMultiplier, loadMultipliers } = require("../../helpers/xpmult");
 
 
 const { 
@@ -20,7 +20,7 @@ const {
   formatNum,
   getLevelFromXP,
   xpForLevel
-} = require("../helpers/functions"); // path depends on your project
+} = require("../../helpers/functions"); // path depends on your project
 
 //get colours
 let LEVEL_COLOURS = [];

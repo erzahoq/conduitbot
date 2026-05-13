@@ -1,5 +1,5 @@
 const { SlashCommandBuilder } = require('discord.js');
-const { SEND_AUTHORIZED_IDS } = require('../config');
+const { SEND_AUTHORIZED_IDS } = require('../../config');
 
 module.exports = {
   data: new SlashCommandBuilder()

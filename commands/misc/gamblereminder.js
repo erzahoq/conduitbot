@@ -1,6 +1,6 @@
 const { SlashCommandBuilder } = require("discord.js");
-const { readJsonSafe, writeJsonAtomic, withFileLock } = require("../helpers/jsonStore");
-const { PATHS, DEFAULTS } = require("../config");
+const { readJsonSafe, writeJsonAtomic, withFileLock } = require("../../helpers/jsonStore");
+const { PATHS, DEFAULTS } = require("../../config");
 
 const gambleCooldownPath = PATHS.data.gambleCooldowns;
 const gambleReminderPath = PATHS.data.gambleReminders;

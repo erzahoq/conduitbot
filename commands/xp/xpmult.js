@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
-const { loadMultipliers, saveMultipliers } = require("../helpers/xpmult");
-const { XP_ADMIN_IDS } = require("../config");
+const { loadMultipliers, saveMultipliers } = require("../../helpers/xpmult");
+const { XP_ADMIN_IDS } = require("../../config");
 
 /* ---------------- CONFIG ---------------- */
 

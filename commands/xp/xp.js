@@ -1,7 +1,7 @@
 const { SlashCommandBuilder } = require("discord.js");
-const { readJsonSafe, writeJsonAtomic, withFileLock } = require("../helpers/jsonStore");
-const { getISOWeekKey } = require("../helpers/functions");
-const { PATHS, XP_ADMIN_IDS } = require("../config");
+const { readJsonSafe, writeJsonAtomic, withFileLock } = require("../../helpers/jsonStore");
+const { getISOWeekKey } = require("../../helpers/functions");
+const { PATHS, XP_ADMIN_IDS } = require("../../config");
 
 /* ---------------- CONFIG ---------------- */
 

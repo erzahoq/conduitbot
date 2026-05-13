@@ -11,8 +11,8 @@ const {
 
 const fs = require("fs").promises;
 
-const { PATHS } = require("../config");
-const { formatNum, getLevelFromXP } = require("../helpers/functions");
+const { PATHS } = require("../../config");
+const { formatNum, getLevelFromXP } = require("../../helpers/functions");
 
 const PAGE_SIZE = 10;
 
@@ -189,6 +189,8 @@ function buildComponents(ownerId, category, page, maxPage) {
   const select = new StringSelectMenuBuilder()
     .setCustomId(makeSelectId(ownerId))
     .setPlaceholder("Select leaderboard")
+    .setMinValues(1)
+    .setMaxValues(1)
     .addOptions(
       { label: "Total XP", value: "total", emoji: "🏆", default: category === "total" },
       { label: "Weekly XP", value: "weekly", emoji: "📅", default: category === "weekly" },
@@ -302,26 +304,18 @@ async function buildPagesForCategory(interaction, category) {
   const entries = await loadEntries(category);
 
   // membersMap is used for filtering + naming
-  const members = await interaction.guild.members.fetch().catch(() => null);
-  const membersMap = members ?? new Map();
+  const membersMap = interaction.guild.members.cache;
 
   // Confirm membership for IDs we have stats for (important if bulk fetch is incomplete)
   const ids = [...new Set(entries.map((e) => e.id))];
+  const missingIds = ids.filter((id) => !membersMap.has(id));
 
-  const presentPairs = await mapWithConcurrency(ids, 8, async (id) => {
-    if (membersMap.has(id)) return [id, true];
-
+  await mapWithConcurrency(missingIds, 8, async (id) => {
     const m = await interaction.guild.members.fetch(id).catch(() => null);
-    if (m) {
-      membersMap.set(id, m);
-      return [id, true];
-    }
-    return [id, false];
+    if (m) membersMap.set(id, m);
   });
 
-  const presentIds = new Set(
-    presentPairs.filter(Boolean).filter(([, ok]) => ok).map(([id]) => id)
-  );
+  const presentIds = new Set(ids.filter((id) => membersMap.has(id)));
 
   // Filter to present members only
   const filtered = entries.filter((e) => presentIds.has(e.id));
@@ -443,17 +437,9 @@ async execute(interaction) {
   const pageOpt = interaction.options.getInteger("page");
   const page = pageOpt ? pageOpt - 1 : 0;
 
-  // build ALL categories up-front
-  const [totalPack, weeklyPack, gamblePack, bestPack, bumpPack] = await Promise.all([
-    buildPagesForCategory(interaction, "total"),
-    buildPagesForCategory(interaction, "weekly"),
-    buildPagesForCategory(interaction, "gamble"),
-    buildPagesForCategory(interaction, "gamble_best"),
-    buildPagesForCategory(interaction, "bump"),
-  ]);
-
-  const packs = { total: totalPack, weekly: weeklyPack, gamble: gamblePack, gamble_best: bestPack, bump: bumpPack };
-  const chosen = packs[category] ?? packs.total;
+  // build only the requested category up-front
+  const chosen = await buildPagesForCategory(interaction, category);
+  const packs = { [category]: chosen };
   const safePage = clamp(page, 0, chosen.maxPage);
 
   const components = buildComponents(ownerId, category, safePage, chosen.maxPage);
@@ -495,14 +481,12 @@ async handleComponent(interaction) {
     });
   }
 
-  // ACK immediately
-  await interaction.deferUpdate();
-
   // Dropdown selection
   if (interaction.isStringSelectMenu()) {
     const nextCategory = interaction.values?.[0] ?? cache.category;
 
-    const pack = cache.packs[nextCategory] ?? cache.packs.total;
+    const pack = cache.packs[nextCategory] ?? await buildPagesForCategory(interaction, nextCategory);
+    cache.packs[nextCategory] = pack;
     const nextPage = 0; // reset to first page when switching categories
 
     cache.category = nextCategory;
@@ -511,7 +495,7 @@ async handleComponent(interaction) {
 
     const components = buildComponents(cache.ownerId, nextCategory, nextPage, pack.maxPage);
 
-    return interaction.editReply({
+    return interaction.update({
       embeds: [pack.embeds[nextPage]],
       components,
     });
@@ -532,7 +516,7 @@ async handleComponent(interaction) {
 
     const components = buildComponents(cache.ownerId, cache.category, nextPage, pack.maxPage);
 
-    return interaction.editReply({
+    return interaction.update({
       embeds: [pack.embeds[nextPage]],
       components,
     });

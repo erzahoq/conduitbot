@@ -8,6 +8,7 @@ const {
     MessageFlags
 } = require('discord.js');
 const fs = require('fs');
+const path = require('path');
 require('dotenv').config();
 
 const { readJsonSafe, writeJsonAtomic, withFileLock } = require("./helpers/jsonStore");
@@ -187,15 +188,33 @@ function pick(arr) {
 
 // load commands from ./commands
 client.commands = new Collection();
-const commandFiles = fs.readdirSync('./commands').filter(file => file.endsWith('.js'));
+const commandsPath = path.join(__dirname, 'commands');
 
-for (const file of commandFiles) {
-    const command = require(`./commands/${file}`);
+function getCommandFiles(dir) {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    const files = [];
+
+    for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+            files.push(...getCommandFiles(fullPath));
+        } else if (entry.isFile() && fullPath.endsWith('.js')) {
+            files.push(fullPath);
+        }
+    }
+
+    return files;
+}
+
+const commandFiles = getCommandFiles(commandsPath);
+
+for (const filePath of commandFiles) {
+    const command = require(filePath);
     if ('data' in command && 'execute' in command) {
         client.commands.set(command.data.name, command);
         console.log(`Loaded command: ${command.data.name}`);
     } else {
-        console.log(`[WARNING] The command at ./commands/${file} is missing "data" or "execute".`);
+        console.log(`[WARNING] The command at ${path.relative(__dirname, filePath)} is missing "data" or "execute".`);
     }
 }
 

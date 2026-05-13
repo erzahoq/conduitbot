@@ -4,7 +4,7 @@ const {
 } = require("discord.js");
 
 const fs = require("fs").promises;
-const { PATHS, BOT_OWNER_IDS } = require("../config");
+const { PATHS, BOT_OWNER_IDS } = require("../../config");
 
 const ALLOWED_USERS = BOT_OWNER_IDS;
 

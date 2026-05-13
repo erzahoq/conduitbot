@@ -1,6 +1,6 @@
 const { SlashCommandBuilder } = require('discord.js');
 const fs = require('fs');
-const { PATHS } = require('../config');
+const { PATHS } = require('../../config');
 const cooldowns = new Map(); // userId → last-used timestamp
 
 // ====== markov setup — learn from messages ======
