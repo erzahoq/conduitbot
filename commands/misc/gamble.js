@@ -220,6 +220,7 @@ const FLAVOUR_TIERS = [
       "big number make brain happy",
       "the house slipped",
       "this was worth the button press",
+      "@grok, is this true?"
   ]
   },
   {
@@ -235,7 +236,8 @@ const FLAVOUR_TIERS = [
       "See kids? Gambling is a real source of income",
       "💸💸💸", 
       "awesome sauce 🐴", 
-      "this is huge", 
+      "this is huge",
+      "this is a dream (you're about to wake up)",
       "this is true"],
   },
 ];
